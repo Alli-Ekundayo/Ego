@@ -1,0 +1,633 @@
+[
+  {
+    "id": "0d0de813c110",
+    "name": "Emmanuel",
+    "category": "User Profile",
+    "description": "Good product — The cylinder looked used and rough, and the gas wasn't what i was expecting cos it was light and felt not durable. The cylinder weight is what i love, easy to carry\nGood — I liked it\nLove it binatone. — What I ordered is what I got. I love the head plug,, the colour, the smoothness of the iron.\nI like it — Just a book \nIt's cool\nhighly recommend — Transfer speed isn't as I expected but regardless it is very reliable and a great SSD for backup\nDisappointed ???? — Some pages are missing, page 17-32\nQuality — It looks very beautiful but it won't last at all\nI don't like it — The quality is too bad, if failed me the first day I used it just that it has enough space ????.\nLoved it — It’s ok\nsize — It would have been better if it was a bit bigger\nAlways the best — This brand of freezer has no match, quick freeze and very long item defrost time...\nNice — Nice\nThis was great — Works perfectly\nThe laptop.is a peerfect one — Very fantastic and very fast responsive system.\nGood — Worth the price\nWorks well — Very chilling and not too much noise\nI like it — It's not that loud but it's good\nVery good — One of my best iron\nNice — I love what I bought\nI don't like it — Doesn't work\nGreat — Great item\nnice what i order that what i get — Look good but expensive\nnice scent — It's chocolate scent is top notch\nPerfect — been enjoying it for 2 months now\nvery good — Nice product recommended for others\nI like it — The perfume is good and last longer than I expected\nI like it — Nice very protective for my phone\nGood — Good product",
+    "review_count": 35,
+    "verified_count": 35,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Home & Office": 0.03571428571428571,
+      "Computing": 0.14285714285714285,
+      "Appliances": 0.21428571428571427,
+      "Books Movies Music": 0.07142857142857142,
+      "Fashion": 0.10714285714285714,
+      "Health & Beauty": 0.21428571428571427,
+      "Video Games": 0.03571428571428571,
+      "Electronics": 0.10714285714285714,
+      "Phones & Tablets": 0.03571428571428571,
+      "Grocery": 0.03571428571428571
+    },
+    "vocab_fingerprint": [
+      "nice",
+      "great",
+      "cylinder",
+      "love",
+      "iron",
+      "item",
+      "scent",
+      "used",
+      "don",
+      "last",
+      "has",
+      "expected",
+      "best",
+      "product",
+      "one"
+    ],
+    "sample_reviews": [
+      "The cylinder looked used and rough, and the gas wasn't what i was expecting cos it was light and felt not durable. The cylinder weight is what i love, easy to carry",
+      "I liked it",
+      "What I ordered is what I got. I love the head plug,, the colour, the smoothness of the iron.",
+      "Just a book \nIt's cool",
+      "Transfer speed isn't as I expected but regardless it is very reliable and a great SSD for backup"
+    ]
+  },
+  {
+    "id": "d8ae57760672",
+    "name": "Samuel",
+    "category": "User Profile",
+    "description": "excellent — Exactly what I wanted????✅\nI love it — Exactly what I needed\nSo far, so good. Fresh and clean; smooth. — Na ds one dem dey call INDUSTRY MACHINE! I recommend 100%.\nI like it — I liked the books but I the book the 48 laws of power was basically a summary not what I expected\nSweet — It's just perfect ????????\nI like it — Works really well and very quiet even without putting it in quiet/sleep mode.\nNot affected by voltage either.\n\nGood buy\nabout my gaming gloves — I was very happy for the fact that the package came and it was as show in the advertisement pictures\nI love it — I like the soap. The fragrance the foaming and how my body feel after I bath I love it. I recommend it.\nis good — Perfect\ngood — But small\ngood — Good\nI love it — The TV is awesome and good, I love it, But only it doesn't have boton on it incease of remote is fault\ngreat phone — Recommend\nExtension — Thr wire is too short\n\nThe wire is too short\nnice — Nice\nI love it — Very great product. \n\nI mean, it's Nivea they'll always deliver.\nI love it — Very great product. \n\nI mean, it's Nivea they'll always deliver.\nGood — Good.i just got it to put my airtel SIM card",
+    "review_count": 22,
+    "verified_count": 22,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Fashion": 0.1111111111111111,
+      "Books Movies Music": 0.1111111111111111,
+      "Computing": 0.1111111111111111,
+      "Appliances": 0.1111111111111111,
+      "Video Games": 0.05555555555555555,
+      "Health & Beauty": 0.2777777777777778,
+      "Electronics": 0.1111111111111111,
+      "Phones & Tablets": 0.1111111111111111
+    },
+    "vocab_fingerprint": [
+      "love",
+      "recommend",
+      "wire",
+      "deliver",
+      "quiet",
+      "mean",
+      "short",
+      "great",
+      "always",
+      "nivea",
+      "exactly",
+      "too",
+      "perfect",
+      "dem",
+      "industry"
+    ],
+    "sample_reviews": [
+      "Exactly what I wanted????✅",
+      "Exactly what I needed",
+      "Na ds one dem dey call INDUSTRY MACHINE! I recommend 100%.",
+      "I liked the books but I the book the 48 laws of power was basically a summary not what I expected",
+      "It's just perfect ????????"
+    ]
+  },
+  {
+    "id": "172522ec1028",
+    "name": "David",
+    "category": "User Profile",
+    "description": "I love it — The product is economical and effective as expected.\ngood read — Nice book\nPetite but Large on the inside — I love the fact that it's small yet gives off a lot of big energy..\nyou can't know it's a sex toy — I like because it has multiple vibrations\nGreat book — Nice quality\npoor product — Did not notice any improve air even though the place is small\nPoor quality — The clothe is really light \nAnd see through\nConfirm! — You know Nivea now. Great quality.\nI like it — The product is of good quality\nmijsmart tv — There packaging ???? and it nice and smart, i live it so much\nGood scent — The scent is nice\nSimple — Classy\nmr — Reliable\nMIJ LED TV — Frameless TV with absolutely unique design\ni recommend i liveit — Shap good product with affordable price\ni recommend i liveit — Shap good product with affordable price",
+    "review_count": 20,
+    "verified_count": 20,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Appliances": 0.0625,
+      "Books Movies Music": 0.125,
+      "Home & Office": 0.125,
+      "Health & Beauty": 0.1875,
+      "Fashion": 0.1875,
+      "Electronics": 0.3125
+    },
+    "vocab_fingerprint": [
+      "product",
+      "liveit",
+      "shap",
+      "quality",
+      "affordable",
+      "know",
+      "nice",
+      "scent",
+      "book",
+      "poor",
+      "recommend",
+      "small",
+      "price",
+      "great",
+      "economical"
+    ],
+    "sample_reviews": [
+      "The product is economical and effective as expected.",
+      "Nice book",
+      "I love the fact that it's small yet gives off a lot of big energy..",
+      "I like because it has multiple vibrations",
+      "Nice quality"
+    ]
+  },
+  {
+    "id": "0acf4539a14b",
+    "name": "Michael",
+    "category": "User Profile",
+    "description": "I like it — The product is ok,and working well\nADVANCED OPERATION — Truly saves so much energy, fast cooling and zero noise\nVery Good — Increase the lace quality\nI like it — Good books and quality\nNetflix is not working on it — Netflix is not working on it. the message is google play service isnt suppoted on the device\nIt's Just Perfect — Works perfectly well.\nI like it — Its cool and exactly what I wanted\nnice,my girl love it — nice\nfantastic — Very good product\nI like it but I'm not at home — It's working but my family said it as no volume\nIt didn't meet expectation — I expected the hairy one\nLow quality — Doesn't look like the pictures in terms of quality\nCheap — Let the smell last longer\niron — It's regulating power without manually doing it is perfect\nI like it — I buy three for my children\nThe smart TV — The TV is very slow, and the video quality is very low, the only advantage is, it consume less power",
+    "review_count": 20,
+    "verified_count": 20,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Computing": 0.0625,
+      "Appliances": 0.25,
+      "Fashion": 0.1875,
+      "Books Movies Music": 0.0625,
+      "Electronics": 0.1875,
+      "Health & Beauty": 0.1875,
+      "Home & Office": 0.0625
+    },
+    "vocab_fingerprint": [
+      "quality",
+      "working",
+      "netflix",
+      "power",
+      "low",
+      "perfect",
+      "well",
+      "advanced",
+      "operation",
+      "truly",
+      "saves",
+      "lace",
+      "message",
+      "service",
+      "isnt"
+    ],
+    "sample_reviews": [
+      "The product is ok,and working well",
+      "Truly saves so much energy, fast cooling and zero noise",
+      "Increase the lace quality",
+      "Good books and quality",
+      "Netflix is not working on it. the message is google play service isnt suppoted on the device"
+    ]
+  },
+  {
+    "id": "aa47f8215c6f",
+    "name": "Daniel",
+    "category": "User Profile",
+    "description": "Daniel — A paper showing how to arrange the chair, will go a long way, can't believe they couldn't print a paper with the pictorial guide for the arrangement of the chair. Also if the foam could be a little bit more comfy, it would go a long way. Hopefully it lasts.\nNot really a face cream for all skin type. — It just like aloe vera gel, Best at night or indoor use only. Feels more sticky in the afternoon especially if you sweat alot, And it doesn't go well with sunscreen It irritates my face but it gradually brighten up the face and it lightweight and absorb well. i used for 4 days before Discontinue use.\nNice. — Good book\nSmooth ironing — Very effective\nlong lasting — It's fully charged within 15 minutes and last about 3 days ♥️\nI really like it — It is very good and it's worth the amount, very good bass\nIm indifferent — What I'd  say is i might not buy this product again ever\nIm indifferent — What I'd  say is i might not buy this product again ever\ni like it — is has a good smell and it is affordable\nexcellent — Very good product\ngood — Not bad at all\nAwesome Quality — The quality is super clear...I love it\nAwesome Quality — The quality is super clear...I love it\nNice — Giving good picture quality.\nNice — Giving good picture quality.",
+    "review_count": 18,
+    "verified_count": 18,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Video Games": 0.06666666666666667,
+      "Health & Beauty": 0.3333333333333333,
+      "Books Movies Music": 0.06666666666666667,
+      "Appliances": 0.06666666666666667,
+      "Electronics": 0.4,
+      "Computing": 0.06666666666666667
+    },
+    "vocab_fingerprint": [
+      "quality",
+      "face",
+      "paper",
+      "indifferent",
+      "long",
+      "might",
+      "giving",
+      "chair",
+      "say",
+      "way",
+      "days",
+      "again",
+      "clear",
+      "ever",
+      "super"
+    ],
+    "sample_reviews": [
+      "A paper showing how to arrange the chair, will go a long way, can't believe they couldn't print a paper with the pictorial guide for the arrangement of the chair. Also if the foam could be a little bit more comfy, it would go a long way. Hopefully it lasts.",
+      "It just like aloe vera gel, Best at night or indoor use only. Feels more sticky in the afternoon especially if you sweat alot, And it doesn't go well with sunscreen It irritates my face but it gradually brighten up the face and it lightweight and absorb well. i used for 4 days before Discontinue use.",
+      "Good book",
+      "Very effective",
+      "It's fully charged within 15 minutes and last about 3 days ♥️"
+    ]
+  },
+  {
+    "id": "cb07901c5321",
+    "name": "Joseph",
+    "category": "User Profile",
+    "description": "reaction — Slow in action\ngood one — Parfait ???? i love it very hot enough for my work\nProducts are Okay — It's okay.\nBest — Really good ????\nthe laws of power as so many leintng error — Make sure it if good printing quality\nI like it — Very nice on my body\nBinatone remains trustworthy — As described\nGood — Is working perfectly, iron smoothly and fast\nit has bass — It doesn't last long\nI like it — I love it\ncool — It's really nice\nits good — It's not bad\nIts ok — Mild fragrance\nI love it — Love the display\nGood battery and strong bass — It lasts so long and so loud that it can replace a home sound system",
+    "review_count": 18,
+    "verified_count": 18,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Health & Beauty": 0.26666666666666666,
+      "Appliances": 0.2,
+      "Books Movies Music": 0.13333333333333333,
+      "Phones & Tablets": 0.06666666666666667,
+      "Fashion": 0.13333333333333333,
+      "Electronics": 0.2
+    },
+    "vocab_fingerprint": [
+      "love",
+      "bass",
+      "long",
+      "really",
+      "okay",
+      "its",
+      "action",
+      "parfait",
+      "many",
+      "leintng",
+      "remains",
+      "trustworthy",
+      "mild",
+      "replace",
+      "slow"
+    ],
+    "sample_reviews": [
+      "Slow in action",
+      "Parfait ???? i love it very hot enough for my work",
+      "It's okay.",
+      "Really good ????",
+      "Make sure it if good printing quality"
+    ]
+  },
+  {
+    "id": "51dc30ddc473",
+    "name": "Peter",
+    "category": "User Profile",
+    "description": "original — Original\noriginal — Original\nGood purchase — I like it.\ngood — Good for the price\nIts the real thing — Fresh breath from using the authentic\nGood — It's okay ????\nGood — It's okay ????\nWorks well — No complaints\nthe material is good — the material is good and it fits very well\nI like it — The product is good\nmilo — Not bad\nThe blade n teeth alignment was poor — The teeth doesn't aling properly\ngood — Very nice still enjoying my own",
+    "review_count": 16,
+    "verified_count": 16,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Grocery": 0.3076923076923077,
+      "Appliances": 0.23076923076923078,
+      "Health & Beauty": 0.3076923076923077,
+      "Fashion": 0.07692307692307693,
+      "Electronics": 0.07692307692307693
+    },
+    "vocab_fingerprint": [
+      "original",
+      "teeth",
+      "material",
+      "okay",
+      "well",
+      "breath",
+      "blade",
+      "alignment",
+      "aling",
+      "real",
+      "fits",
+      "milo",
+      "properly",
+      "own",
+      "thing"
+    ],
+    "sample_reviews": [
+      "Original",
+      "Original",
+      "I like it.",
+      "Good for the price",
+      "Fresh breath from using the authentic"
+    ]
+  },
+  {
+    "id": "ffc150a160d3",
+    "name": "Victor",
+    "category": "User Profile",
+    "description": "❤️ — Super great\nDecent Order — I wish I could give it a 4.5 but I can't. Primarily because the prints in most pages are too faint. Asides that, it's a good one.\nNice — it was my perfect size! very comfortable\nsun king — Yes it's good but at least more light bulbs\nnice product — Long lasting battery.\nUp to 5 cuts\nI like it — I love it, very good\nI like it — It's very nice ???? ☺\nGood — Make it more firm and add a little length to it thanks\nNO BLUETOOTH — Cool display. Good browser\nbody lotion — Best cream I ever used\nsomehow — Provide bigger and longer variations\nMANAGEABLE — Synthetic leather, extremely light (like wearing black polythene bag). And the sizing is 1 size down 42 is 41",
+    "review_count": 14,
+    "verified_count": 14,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Books Movies Music": 0.16666666666666666,
+      "Fashion": 0.25,
+      "Home & Office": 0.08333333333333333,
+      "Health & Beauty": 0.25,
+      "Electronics": 0.16666666666666666,
+      "Phones & Tablets": 0.08333333333333333
+    },
+    "vocab_fingerprint": [
+      "size",
+      "light",
+      "nice",
+      "primarily",
+      "prints",
+      "faint",
+      "king",
+      "least",
+      "bulbs",
+      "firm",
+      "somehow",
+      "provide",
+      "variations",
+      "synthetic",
+      "extremely"
+    ],
+    "sample_reviews": [
+      "Super great",
+      "I wish I could give it a 4.5 but I can't. Primarily because the prints in most pages are too faint. Asides that, it's a good one.",
+      "it was my perfect size! very comfortable",
+      "Yes it's good but at least more light bulbs",
+      "Long lasting battery.\nUp to 5 cuts"
+    ]
+  },
+  {
+    "id": "2ccd89b67324",
+    "name": "Blessing",
+    "category": "User Profile",
+    "description": "working but... — Working well. However, I expected it to consume lower electricity. The Wattage is over 1k which may not be suitable for most solar inverter system\nI like it — It’s very concentrated and choking , it’s okay\nDecent buy — I would have given it 5 stars ????, but it is not up to the size that has been put out. I love the quality and texture and all. But the size. Overall it a very decent buy.\nFabulous — Worth the money\nGood — Good\nSty — make it bigger with better quality\nredbeat phone is the best — I love the camera and the battery ???? \nThe phone is good 100%\nnice product — Just started using it and it's really soft on skin\nit glows perfectly — Very effective\nits very good — Rexona is the best as usual. No under arm boils and others",
+    "review_count": 12,
+    "verified_count": 12,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Appliances": 0.1,
+      "Grocery": 0.1,
+      "Home & Office": 0.2,
+      "Health & Beauty": 0.4,
+      "Fashion": 0.1,
+      "Phones & Tablets": 0.1
+    },
+    "vocab_fingerprint": [
+      "decent",
+      "phone",
+      "size",
+      "best",
+      "buy",
+      "working",
+      "lower",
+      "wattage",
+      "may",
+      "suitable",
+      "concentrated",
+      "choking",
+      "fabulous",
+      "sty",
+      "redbeat"
+    ],
+    "sample_reviews": [
+      "Working well. However, I expected it to consume lower electricity. The Wattage is over 1k which may not be suitable for most solar inverter system",
+      "It’s very concentrated and choking , it’s okay",
+      "I would have given it 5 stars ????, but it is not up to the size that has been put out. I love the quality and texture and all. But the size. Overall it a very decent buy.",
+      "Worth the money",
+      "Good"
+    ]
+  },
+  {
+    "id": "5cf7573f250d",
+    "name": "Taiwo",
+    "category": "User Profile",
+    "description": "Like the product — Nice one\nworh.the hype — Sharp game\nThe bag is given — I love it.\nI love it — Very delicious ????\nOk — Okay for the price\nI like it — The product is nice.. I always feel comfortable on it\nsexy — Very good and sexy on my wife, it makes her feel free\nworks well — good value for the price\ngood product — This is so good\nI don't like it — Battery ???? goes down early",
+    "review_count": 12,
+    "verified_count": 12,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Grocery": 0.3,
+      "Video Games": 0.1,
+      "Baby Products": 0.1,
+      "Fashion": 0.2,
+      "Appliances": 0.1,
+      "Health & Beauty": 0.2
+    },
+    "vocab_fingerprint": [
+      "sexy",
+      "feel",
+      "product",
+      "price",
+      "worh",
+      "delicious",
+      "her",
+      "early",
+      "hype",
+      "wife",
+      "goes",
+      "down",
+      "game",
+      "given",
+      "comfortable"
+    ],
+    "sample_reviews": [
+      "Nice one",
+      "Sharp game",
+      "I love it.",
+      "Very delicious ????",
+      "Okay for the price"
+    ]
+  },
+  {
+    "id": "e45143a06ec7",
+    "name": "Ifeanyi",
+    "category": "User Profile",
+    "description": "I like it — It’s good quality\noriginal — Nice one\ncooling fast — Great\nOk — It's working well\nvery nice — Its a nice product.  Very good\ncolors and software — colors and software\nNice — Excellent. Too smooth. You will like it. It does more than written\nI like it — It is very effective, l love it\nI love it — Good product",
+    "review_count": 11,
+    "verified_count": 11,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Sports": 0.1111111111111111,
+      "Grocery": 0.1111111111111111,
+      "Appliances": 0.4444444444444444,
+      "Electronics": 0.2222222222222222,
+      "Health & Beauty": 0.1111111111111111
+    },
+    "vocab_fingerprint": [
+      "colors",
+      "software",
+      "nice",
+      "written",
+      "love",
+      "product",
+      "cooling",
+      "smooth",
+      "effective",
+      "fast",
+      "original",
+      "does",
+      "excellent",
+      "its",
+      "one"
+    ],
+    "sample_reviews": [
+      "It’s good quality",
+      "Nice one",
+      "Great",
+      "It's working well",
+      "Its a nice product.  Very good"
+    ]
+  },
+  {
+    "id": "ffead8f75bff",
+    "name": "Favour",
+    "category": "User Profile",
+    "description": "Good product so far — So far so good, it’s working perfectly fine it’s a small surface so I can fit more than two Standard size pots at a time it can however fit small pots. I recommend for single people who don’t do much cooking and want a gas with a functional oven.\ngreat book — great for coming of age...inspiring too\nmilo — It tastes great\nI really love it — Honestly Its worth the hype,long lasting and pocket friendly, I'll recommend.\nit makes me sweat — although I would have to put on less than I normally do, it still makes me sweat but I has coverage (my sun burn is lesser now )\nIt's thin — I thought I could wear it for gym activities but it's too thin\nheadphonereview — Make sure everything inside the headphone is fixed in the right place\nI like it — Good but no hanger",
+    "review_count": 10,
+    "verified_count": 10,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Appliances": 0.125,
+      "Books Movies Music": 0.125,
+      "Grocery": 0.125,
+      "Health & Beauty": 0.25,
+      "Fashion": 0.125,
+      "Electronics": 0.25
+    },
+    "vocab_fingerprint": [
+      "pots",
+      "thin",
+      "fit",
+      "sweat",
+      "great",
+      "makes",
+      "recommend",
+      "small",
+      "far",
+      "too",
+      "surface",
+      "single",
+      "who",
+      "cooking",
+      "age"
+    ],
+    "sample_reviews": [
+      "So far so good, it’s working perfectly fine it’s a small surface so I can fit more than two Standard size pots at a time it can however fit small pots. I recommend for single people who don’t do much cooking and want a gas with a functional oven.",
+      "great for coming of age...inspiring too",
+      "It tastes great",
+      "Honestly Its worth the hype,long lasting and pocket friendly, I'll recommend.",
+      "although I would have to put on less than I normally do, it still makes me sweat but I has coverage (my sun burn is lesser now )"
+    ]
+  },
+  {
+    "id": "23f9d50ecd20",
+    "name": "Precious",
+    "category": "User Profile",
+    "description": "cool — Nice scent\nnice — Came as ordered\nThe product does not work — There is no app that is compatible with my device for the product, it does not work with all applications I have used from iOS store. They all ask to pay to be connected and it still does not work. A waste of money if you ask me\nLove it — Great product\nnice — Although very light and smaller than I wanted, it looks lovely\ngood product — good product\nvery sharp — Very sharp I like it\nGood — Keeps my face moisturised",
+    "review_count": 10,
+    "verified_count": 10,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Health & Beauty": 0.625,
+      "Computing": 0.125,
+      "Sports": 0.125,
+      "Fashion": 0.125
+    },
+    "vocab_fingerprint": [
+      "does",
+      "product",
+      "work",
+      "ask",
+      "sharp",
+      "nice",
+      "compatible",
+      "applications",
+      "ios",
+      "pay",
+      "waste",
+      "moisturised",
+      "smaller",
+      "app",
+      "store"
+    ],
+    "sample_reviews": [
+      "Nice scent",
+      "Came as ordered",
+      "There is no app that is compatible with my device for the product, it does not work with all applications I have used from iOS store. They all ask to pay to be connected and it still does not work. A waste of money if you ask me",
+      "Great product",
+      "Although very light and smaller than I wanted, it looks lovely"
+    ]
+  },
+  {
+    "id": "647431b5ca55",
+    "name": "Gabriel",
+    "category": "User Profile",
+    "description": "I like it — Good packet\nI like it — Good packet\nnot lasting as advertised — It doesn't last,I have now used it.\nI like it — It’s ok for now\ntoo light — Nice clothe but its too light\nI like it — It's really nice\nreduce electricity consumption — Good\nreduce electricity consumption — Good",
+    "review_count": 10,
+    "verified_count": 10,
+    "rating_stats": {
+      "mean": 5.0,
+      "std": 0.0,
+      "skew": 0.0
+    },
+    "category_pref": {
+      "Grocery": 0.25,
+      "Health & Beauty": 0.125,
+      "Appliances": 0.375,
+      "Fashion": 0.25
+    },
+    "vocab_fingerprint": [
+      "packet",
+      "reduce",
+      "consumption",
+      "electricity",
+      "now",
+      "light",
+      "too",
+      "clothe",
+      "advertised",
+      "nice",
+      "lasting",
+      "doesn",
+      "used",
+      "last",
+      "really"
+    ],
+    "sample_reviews": [
+      "Good packet",
+      "Good packet",
+      "It doesn't last,I have now used it.",
+      "It’s ok for now",
+      "Nice clothe but its too light"
+    ]
+  }
+]

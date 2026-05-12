@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+qdrant_storage
+data/jumia_reviews.json
+data/user_profiles.json
+*.ipynb
+outputs
+logs
+.env
