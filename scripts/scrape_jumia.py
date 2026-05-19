@@ -54,17 +54,17 @@ BASE_URL = "https://www.jumia.com.ng"
 
 # Confirmed working category URL slugs (these are real Jumia nav paths)
 DEFAULT_CATEGORIES: dict[str, str] = {
-    "phones-tablets":  "Phones & Tablets",
-    "electronics":     "Electronics",
-    "computing":       "Computing",
-    "home-office":     "Home & Office",
-    "fashion":         "Fashion",
-    "groceries":       "Grocery",
-    "baby-products":   "Baby Products",
-    "health-beauty":   "Health & Beauty",
-    "sporting-goods":  "Sports",
-    "mlp-appliances":  "Appliances",
-    "video-games":     "Video Games",
+    "phones-tablets": "Phones & Tablets",
+    "electronics": "Electronics",
+    "computing": "Computing",
+    "home-office": "Home & Office",
+    "fashion": "Fashion",
+    "groceries": "Grocery",
+    "baby-products": "Baby Products",
+    "health-beauty": "Health & Beauty",
+    "sporting-goods": "Sports",
+    "mlp-appliances": "Appliances",
+    "video-games": "Video Games",
 }
 
 # Rotating user-agents mimicking real Nigerian browser traffic
@@ -89,21 +89,21 @@ DATA_DIR = Path("data")
 # ---------------------------------------------------------------------------
 @dataclass
 class Review:
-    title:    str
-    body:     str
+    title: str
+    body: str
     reviewer: str
-    date:     str
+    date: str
     verified: bool
 
 
 @dataclass
 class Product:
-    id:           str
-    name:         str
-    category:     str
-    url:          str
-    description:  str
-    reviews:      list[Review] = field(default_factory=list)
+    id: str
+    name: str
+    category: str
+    url: str
+    description: str
+    reviews: list[Review] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,9 @@ def _get(session: requests.Session, url: str, retries: int = 3) -> BeautifulSoup
                 log.warning("Rate-limited (429). Waiting %.1fs…", wait)
                 time.sleep(wait)
             else:
-                log.warning("HTTP %s on attempt %d for %s", resp.status_code, attempt, url)
+                log.warning(
+                    "HTTP %s on attempt %d for %s", resp.status_code, attempt, url
+                )
                 time.sleep(2 * attempt)
         except requests.RequestException as exc:
             log.warning("Request error (attempt %d/%d): %s", attempt, retries, exc)
@@ -134,9 +136,16 @@ def _get(session: requests.Session, url: str, retries: int = 3) -> BeautifulSoup
 # ---------------------------------------------------------------------------
 # Listing parser
 # ---------------------------------------------------------------------------
-def has_next_page(soup: BeautifulSoup) -> bool:
-    """Return True if a 'Next Page' pagination link exists on the page."""
-    return bool(soup.find("a", {"aria-label": "Next Page"}))
+def has_next_page(soup: BeautifulSoup, current_page: int) -> bool:
+    """Return True if a 'Next Page' link or a link to the next page number exists."""
+    # Desktop pattern
+    if soup.find("a", {"aria-label": "Next Page"}):
+        return True
+    # Mobile/Fallback pattern: look for a link containing ?page=N+1
+    next_page_str = f"page={current_page + 1}"
+    if soup.find("a", href=lambda h: h and next_page_str in h):
+        return True
+    return False
 
 
 def parse_listing(soup: BeautifulSoup, category_label: str) -> list[dict]:
@@ -149,19 +158,21 @@ def parse_listing(soup: BeautifulSoup, category_label: str) -> list[dict]:
         link = card.select_one("a.core")
         if not link:
             continue
-        url  = urljoin(BASE_URL, link["href"])
+        url = urljoin(BASE_URL, link["href"])
         name = card.select_one(".name")
         name = name.get_text(strip=True) if name else ""
         if not name:
             continue
         # Products with star ratings are more likely to have reviews
         has_stars = card.select_one(".stars") is not None
-        products.append({
-            "name":      name,
-            "url":       url,
-            "category":  category_label,
-            "has_stars": has_stars,
-        })
+        products.append(
+            {
+                "name": name,
+                "url": url,
+                "category": category_label,
+                "has_stars": has_stars,
+            }
+        )
     return products
 
 
@@ -187,7 +198,9 @@ def scrape_listing_pages(
         log.info("  Listing page %d/%d → %s", page_num, max_pages, url)
         soup = _get(session, url)
         if not soup:
-            log.warning("  Failed to fetch listing page %d, stopping pagination.", page_num)
+            log.warning(
+                "  Failed to fetch listing page %d, stopping pagination.", page_num
+            )
             break
 
         page_cards = parse_listing(soup, cat_label)
@@ -195,7 +208,7 @@ def scrape_listing_pages(
         seen_urls.update(c["url"] for c in new_cards)
         listings.extend(new_cards)
 
-        if not has_next_page(soup):
+        if not has_next_page(soup, page_num):
             log.info("  No 'Next Page' link — reached last page at page %d.", page_num)
             break
 
@@ -237,15 +250,23 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
       </article>
     """
     reviews = []
-    # Each review is an <article> with these three classes
-    for article in soup.find_all("article", class_=lambda c: c and "-pvs" in c and "_bet" in c):
+    # Each review is an <article> with these three classes (pvs=small padding, pvm=medium)
+    for article in soup.find_all(
+        "article", class_=lambda c: c and ("-pvs" in c or "-pvm" in c) and "_bet" in c
+    ):
         try:
-            # Title: h3.-m.-fs16.-pvs
+            # Title: h3.-m.-fs16.-pvs (or -pvm)
             h3 = article.find("h3", class_="-m")
             title = h3.get_text(strip=True) if h3 else ""
 
-            # Body: p.-pvs immediately after the h3
-            p = h3.find_next_sibling("p") if h3 else article.find("p")
+            # Body: p.-pvs (or -pvm) immediately after the h3
+            p = (
+                h3.find_next_sibling("p")
+                if h3
+                else article.find(
+                    "p", class_=lambda c: c and ("-pvs" in c or "-pvm" in c)
+                )
+            )
             body = p.get_text(strip=True) if p else ""
             if len(body) < 3:
                 continue
@@ -258,21 +279,28 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
             #     </div>
             #     <div class="-df -i-ctr -gn5 -fsh0">...Verified Purchase</div>
             #   </div>
-            footer = article.find("div", class_=lambda c: c and "-j-bet" in c and "-gy5" in c)
+            footer = article.find(
+                "div", class_=lambda c: c and "-j-bet" in c and "-gy5" in c
+            )
 
             reviewer = "Anonymous"
             date = ""
             verified = False
 
             if footer:
-                info_div = footer.find("div", class_="-pvs")
+                info_div = footer.find(
+                    "div", class_=lambda c: c and ("-pvs" in c or "-pvm" in c)
+                )
                 if info_div:
                     spans = info_div.find_all("span", recursive=False)
                     if len(spans) >= 1:
-                        date = spans[0].get_text(strip=True)   # "28-04-2026"
+                        date = spans[0].get_text(strip=True)  # "28-04-2026"
                     if len(spans) >= 2:
                         by_text = spans[1].get_text(strip=True)  # "by Oluwole"
-                        reviewer = re.sub(r'^by\s+', '', by_text, flags=re.I).strip() or "Anonymous"
+                        reviewer = (
+                            re.sub(r"^by\s+", "", by_text, flags=re.I).strip()
+                            or "Anonymous"
+                        )
                 # Verified: green badge div has class -gn5
                 verified = bool(footer.find(class_=lambda c: c and "-gn5" in c))
 
@@ -280,15 +308,17 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
             stars_el = article.find("div", class_="stars")
             rating_text = stars_el.get_text(strip=True) if stars_el else "0"
             rating_match = re.search(r"(\d+\.?\d*)", rating_text)
-            rating = float(rating_match.group(1)) if rating_match else 5.0
+            float(rating_match.group(1)) if rating_match else 5.0
 
-            reviews.append(Review(
-                title=title,
-                body=body,
-                reviewer=reviewer,
-                date=date,
-                verified=verified,
-            ))
+            reviews.append(
+                Review(
+                    title=title,
+                    body=body,
+                    reviewer=reviewer,
+                    date=date,
+                    verified=verified,
+                )
+            )
         except Exception as exc:
             log.debug("Skipping review block: %s", exc)
 
@@ -324,7 +354,7 @@ def paginate_reviews(
         page_reviews = parse_reviews(soup)
         all_reviews.extend(page_reviews)
 
-        if not has_next_page(soup):
+        if not has_next_page(soup, page_num):
             break
 
         time.sleep(random.uniform(0.5, 1.0))
@@ -354,9 +384,9 @@ def scrape_product(
     description = desc_el.get_text(" ", strip=True)[:1000] if desc_el else ""
 
     # ---- SKU → reviews URL ----
-    sku = extract_sku(soup.get_text())   # search rendered text for speed
+    sku = extract_sku(soup.get_text())  # search rendered text for speed
     if not sku:
-        sku = extract_sku(str(soup))     # fallback: full HTML string
+        sku = extract_sku(str(soup))  # fallback: full HTML string
 
     if not sku:
         log.debug("No SKU found for %s", product_url)
@@ -376,36 +406,63 @@ def main() -> None:
         description="Scrape Jumia Nigeria reviews for the Ego NLP/accent pipeline."
     )
     parser.add_argument(
-        "--categories", nargs="+",
+        "--categories",
+        nargs="+",
         default=["phones-tablets"],
         metavar="SLUG",
         help=f"Category slugs. Available: {', '.join(DEFAULT_CATEGORIES.keys())}",
     )
     parser.add_argument(
-        "--pages", type=int, default=3,
+        "--pages",
+        type=int,
+        default=3,
         help="Number of listing pages to crawl per category (default: 3, ~120 products/page).",
     )
     parser.add_argument(
-        "--review-pages", type=int, default=10,
+        "--review-pages",
+        type=int,
+        default=10,
         help="Max review pages to fetch per product (default: 10, ~100 reviews/product).",
     )
     parser.add_argument(
-        "--limit", type=int, default=0,
+        "--limit",
+        type=int,
+        default=0,
         help="Max products with reviews per category. 0 = no limit (default: 0).",
     )
     parser.add_argument(
-        "--delay", type=float, default=2.0,
+        "--delay",
+        type=float,
+        default=2.0,
         help="Base delay (seconds) between product requests (default: 2).",
     )
     args = parser.parse_args()
 
     session = requests.Session()
-    all_products: list[dict] = []
+    raw_path = DATA_DIR / "jumia_reviews.json"
+
+    if raw_path.exists():
+        try:
+            with open(raw_path, "r", encoding="utf-8") as f:
+                all_products = json.load(f)
+            log.info(
+                "Resuming scrape: Loaded %d existing products from %s",
+                len(all_products),
+                raw_path,
+            )
+        except Exception as exc:
+            log.warning("Failed to load existing data: %s. Starting fresh.", exc)
+            all_products = []
+    else:
+        all_products = []
+
+    seen_ids = {p["id"] for p in all_products}
 
     for cat_slug in args.categories:
         cat_label = DEFAULT_CATEGORIES.get(cat_slug, cat_slug.replace("-", " ").title())
 
         log.info("\n── Category: %s ──  (pages=1–%d)", cat_label, args.pages)
+        raw_path = DATA_DIR / "jumia_reviews.json"
 
         # ---- Paginated listing crawl ----
         listings = scrape_listing_pages(session, cat_slug, cat_label, args.pages)
@@ -417,6 +474,11 @@ def main() -> None:
             if args.limit > 0 and found >= args.limit:
                 break
 
+            pid = hashlib.md5(item["url"].encode()).hexdigest()[:12]
+            if pid in seen_ids:
+                log.info("    (already scraped — skipping)")
+                continue
+
             log.info("  ↳ %s", item["name"])
             reviews, desc = scrape_product(
                 item["url"], session, max_review_pages=args.review_pages
@@ -427,11 +489,14 @@ def main() -> None:
                 time.sleep(args.delay * 0.5 + random.uniform(0, 0.5))
                 continue
 
-            log.info("    ✓ %d review(s) across %d page(s)",
-                     len(reviews),
-                     min(args.review_pages, (len(reviews) // 10) + 1))
+            log.info(
+                "    ✓ %d review(s) across %d page(s)",
+                len(reviews),
+                min(args.review_pages, (len(reviews) // 10) + 1),
+            )
+
             product = Product(
-                id=hashlib.md5(item["url"].encode()).hexdigest()[:12],
+                id=pid,
                 name=item["name"],
                 category=item["category"],
                 url=item["url"],
@@ -439,7 +504,14 @@ def main() -> None:
                 reviews=reviews,
             )
             all_products.append(asdict(product))
+            seen_ids.add(pid)
             found += 1
+
+            # Incremental save more frequently
+            if found % 3 == 0:
+                with open(raw_path, "w", encoding="utf-8") as f:
+                    json.dump(all_products, f, ensure_ascii=False, indent=2)
+                log.info("    (incremental save: %d products total)", len(all_products))
 
             jitter = random.uniform(0.5, 1.5)
             time.sleep(args.delay + jitter)
@@ -459,16 +531,20 @@ def main() -> None:
     pipeline_items = []
     for p in all_products:
         review_bodies = [r["body"] for r in p["reviews"] if r.get("body")]
-        reviews_blob  = " | ".join(review_bodies[:8])
-        enriched_desc = " ".join(filter(None, [p.get("description", ""), reviews_blob])).strip()
-        pipeline_items.append({
-            "id":             p["id"],
-            "name":           p["name"],
-            "category":       p["category"],
-            "description":    enriched_desc or p["name"],
-            "url":            p["url"],
-            "sample_reviews": review_bodies[:8],
-        })
+        reviews_blob = " | ".join(review_bodies[:8])
+        enriched_desc = " ".join(
+            filter(None, [p.get("description", ""), reviews_blob])
+        ).strip()
+        pipeline_items.append(
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "category": p["category"],
+                "description": enriched_desc or p["name"],
+                "url": p["url"],
+                "sample_reviews": review_bodies[:8],
+            }
+        )
 
     items_path = DATA_DIR / "items.json"
     with open(items_path, "w", encoding="utf-8") as f:

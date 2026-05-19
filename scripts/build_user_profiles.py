@@ -23,7 +23,7 @@ Each user profile contains:
 The vector indexed into Qdrant is the user's `voice_sample`, so semantic
 search returns users with similar language patterns / Nigerian accent signals.
 
---min-reviews (default 10) keeps only users with enough reviews to build
+--min-reviews (default 5) keeps only users with enough reviews to build
 an enriched, representative voice model. Run a wider scrape first if 0
 users qualify.
 
@@ -33,14 +33,14 @@ Usage:
 """
 
 import argparse
+import datetime
 import hashlib
 import json
 import logging
-import re
-import datetime
 import math
+import re
 import statistics
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 
 logging.basicConfig(
@@ -53,17 +53,76 @@ log = logging.getLogger(__name__)
 DATA_DIR = Path("data")
 
 STOPWORDS = {
-    "the","and","for","this","that","with","from","have","been","were",
-    "they","their","what","which","when","very","just","also","more",
-    "some","would","could","then","than","into","will","your","about","like",
-    "is", "it", "to", "i", "a", "of", "my", "in", "it's", "are", "but", "as",
-    "on", "so", "not", "can", "be", "if", "or", "at", "you", "good", "very",
-    "all", "out", "no", "yes", "do", "we", "he", "she", "an", "up", "was"
+    "the",
+    "and",
+    "for",
+    "this",
+    "that",
+    "with",
+    "from",
+    "have",
+    "been",
+    "were",
+    "they",
+    "their",
+    "what",
+    "which",
+    "when",
+    "very",
+    "just",
+    "also",
+    "more",
+    "some",
+    "would",
+    "could",
+    "then",
+    "than",
+    "into",
+    "will",
+    "your",
+    "about",
+    "like",
+    "is",
+    "it",
+    "to",
+    "i",
+    "a",
+    "of",
+    "my",
+    "in",
+    "it's",
+    "are",
+    "but",
+    "as",
+    "on",
+    "so",
+    "not",
+    "can",
+    "be",
+    "if",
+    "or",
+    "at",
+    "you",
+    "good",
+    "very",
+    "all",
+    "out",
+    "no",
+    "yes",
+    "do",
+    "we",
+    "he",
+    "she",
+    "an",
+    "up",
+    "was",
 }
 
+
 def user_id(name: str) -> str:
-    """Stable 12-char ID derived from the reviewer's name (lowercased)."""
-    return hashlib.md5(name.strip().lower().encode()).hexdigest()[:12]
+    """Stable full MD5 ID derived from the reviewer's name (lowercased)."""
+    return hashlib.md5(name.strip().lower().encode()).hexdigest()
+
 
 def parse_date(date_str: str) -> datetime.datetime:
     """Parse Jumia dates like '26-06-2025' or '05-01-2026'."""
@@ -72,72 +131,79 @@ def parse_date(date_str: str) -> datetime.datetime:
     except ValueError:
         return datetime.datetime.min
 
+
 def get_words(text: str) -> list[str]:
-    words = re.findall(r'\b[a-z]{3,}\b', text.lower())
+    words = re.findall(r"\b[a-z]{3,}\b", text.lower())
     return [w for w in words if w not in STOPWORDS]
+
 
 def build_profiles(raw_products: list[dict], min_reviews: int = 1) -> list[dict]:
     # Map: reviewer_name → list of review dicts enriched with product context
     user_reviews_map: dict[str, list[dict]] = defaultdict(list)
+    display_name_map: dict[str, str] = {}
 
     for product in raw_products:
         product_context = {
-            "product_id":   product.get("id", ""),
+            "product_id": product.get("id", ""),
             "product_name": product.get("name", ""),
-            "product_url":  product.get("url", ""),
-            "category":     product.get("category", ""),
+            "product_url": product.get("url", ""),
+            "category": product.get("category", ""),
         }
         for review in product.get("reviews", []):
-            reviewer = review.get("reviewer", "Anonymous").strip() or "Anonymous"
+            reviewer_raw = review.get("reviewer", "Anonymous").strip() or "Anonymous"
+            reviewer_key = reviewer_raw.strip().lower()
+            if not reviewer_key:
+                reviewer_key = "anonymous"
+            if reviewer_key not in display_name_map:
+                display_name_map[reviewer_key] = reviewer_raw
             # Parse date for sorting
             date_obj = parse_date(review.get("date", ""))
-            
-            user_reviews_map[reviewer].append({
-                **product_context,
-                "title":    review.get("title", ""),
-                "body":     review.get("body", ""),
-                "rating":   review.get("rating", 5.0),
-                "date":     review.get("date", ""),
-                "date_obj": date_obj,
-                "verified": review.get("verified", False),
-            })
+
+            user_reviews_map[reviewer_key].append(
+                {
+                    **product_context,
+                    "title": review.get("title", ""),
+                    "body": review.get("body", ""),
+                    "rating": review.get("rating", 5.0),
+                    "date": review.get("date", ""),
+                    "date_obj": date_obj,
+                    "verified": review.get("verified", False),
+                }
+            )
 
     # Optional pre-filtering
     valid_users = {k: v for k, v in user_reviews_map.items() if len(v) >= min_reviews}
     if not valid_users:
         valid_users = user_reviews_map
-        
+
     # Phase 1: Train/Test split and compute corpus DF
     document_frequency = Counter()
     total_users = 0
-    
+
     user_data = {}
     for name, reviews in valid_users.items():
         # Sort chronologically
         reviews.sort(key=lambda r: r["date_obj"])
-        
+
         # 80/20 train/test split. Test holds out the last 20% (approx 2-3 reviews if 10 total)
         test_size = max(1, int(len(reviews) * 0.2))
         train_reviews = reviews[:-test_size]
         test_reviews = reviews[-test_size:]
-        
+
         # Clean up date_obj from reviews before saving to JSON
         for r in train_reviews + test_reviews:
             r.pop("date_obj", None)
-            
-        user_data[name] = {
-            "train": train_reviews,
-            "test": test_reviews
-        }
-        
+
+        user_data[name] = {"train": train_reviews, "test": test_reviews}
+
         # Update corpus Document Frequency using ONLY train reviews to prevent data leakage
         user_words = set()
         for r in train_reviews:
             user_words.update(get_words(r.get("title", "") + " " + r.get("body", "")))
-        
+
         for w in user_words:
             document_frequency[w] += 1
-            
+
         total_users += 1
 
     # Phase 2: Compute stats per user
@@ -146,41 +212,47 @@ def build_profiles(raw_products: list[dict], min_reviews: int = 1) -> list[dict]
         train_reviews = data["train"]
         test_reviews = data["test"]
         all_reviews = train_reviews + test_reviews
-        
+
         # Rating stats from Train
         ratings = [r["rating"] for r in train_reviews if "rating" in r]
         avg_rating = statistics.mean(ratings) if ratings else 0.0
         std_rating = statistics.stdev(ratings) if len(ratings) > 1 else 0.0
-        
+
         # Skewness: 3*(mean-median)/std
         if std_rating > 0:
             median_rating = statistics.median(ratings)
             skew_rating = 3 * (avg_rating - median_rating) / std_rating
         else:
             skew_rating = 0.0
-            
+
         # Category Preference from Train
         categories = [r["category"] for r in train_reviews if r.get("category")]
         cat_counts = Counter(categories)
         total_cats = sum(cat_counts.values())
-        cat_pref = {cat: count / total_cats for cat, count in cat_counts.items()} if total_cats > 0 else {}
-        
+        cat_pref = (
+            {cat: count / total_cats for cat, count in cat_counts.items()}
+            if total_cats > 0
+            else {}
+        )
+
         # TF-IDF Vocabulary Fingerprint from Train
         user_word_counts = Counter()
         for r in train_reviews:
-            user_word_counts.update(get_words(r.get("title", "") + " " + r.get("body", "")))
-            
+            user_word_counts.update(
+                get_words(r.get("title", "") + " " + r.get("body", ""))
+            )
+
         tf_idf = {}
         total_words = sum(user_word_counts.values())
         for w, count in user_word_counts.items():
             tf = count / total_words if total_words > 0 else 0
             idf = math.log(total_users / (1 + document_frequency[w]))
             tf_idf[w] = tf * idf
-            
+
         # Get top 15 words by TF-IDF
         top_words = sorted(tf_idf.items(), key=lambda x: x[1], reverse=True)[:15]
         vocab_fingerprint = {w: round(score, 4) for w, score in top_words}
-        
+
         # Voice sample from train reviews
         voice_parts = []
         for r in train_reviews:
@@ -189,22 +261,24 @@ def build_profiles(raw_products: list[dict], min_reviews: int = 1) -> list[dict]
                 voice_parts.append(part)
         voice_sample = "\n".join(voice_parts)
 
-        profiles.append({
-            "user_id":        user_id(name),
-            "name":           name,
-            "review_count":   len(all_reviews),
-            "verified_count": sum(1 for r in all_reviews if r.get("verified")),
-            "train_reviews":  train_reviews,
-            "test_reviews":   test_reviews,
-            "voice_sample":   voice_sample,
-            "rating_stats": {
-                "mean": round(avg_rating, 2),
-                "std": round(std_rating, 2),
-                "skew": round(skew_rating, 2)
-            },
-            "category_pref":  cat_pref,
-            "vocab_fingerprint": vocab_fingerprint
-        })
+        profiles.append(
+            {
+                "user_id": user_id(name),
+                "name": display_name_map.get(name, name),
+                "review_count": len(all_reviews),
+                "verified_count": sum(1 for r in all_reviews if r.get("verified")),
+                "train_reviews": train_reviews,
+                "test_reviews": test_reviews,
+                "voice_sample": voice_sample,
+                "rating_stats": {
+                    "mean": round(avg_rating, 2),
+                    "std": round(std_rating, 2),
+                    "skew": round(skew_rating, 2),
+                },
+                "category_pref": cat_pref,
+                "vocab_fingerprint": vocab_fingerprint,
+            }
+        )
 
     # Sort by review count descending
     profiles.sort(key=lambda p: p["review_count"], reverse=True)
@@ -217,7 +291,7 @@ def print_distribution(profiles: list[dict], min_reviews: int) -> None:
     log.info("\n── Review-count distribution across %d users ──", len(profiles))
     for t in thresholds:
         count = sum(1 for p in profiles if p["review_count"] >= t)
-        bar   = "█" * count
+        bar = "█" * count
         log.info("  ≥%2d reviews: %3d users  %s", t, count, bar)
     qualifying = sum(1 for p in profiles if p["review_count"] >= min_reviews)
     log.info("")
@@ -233,7 +307,9 @@ def print_distribution(profiles: list[dict], min_reviews: int) -> None:
     else:
         log.info(
             "%d / %d users qualify with ≥%d reviews and will be indexed.",
-            qualifying, len(profiles), min_reviews,
+            qualifying,
+            len(profiles),
+            min_reviews,
         )
 
 
@@ -244,19 +320,21 @@ def profiles_to_items(profiles: list[dict]) -> list[dict]:
     """
     items = []
     for p in profiles:
-        items.append({
-            "id":             p["user_id"],
-            "name":           p["name"],
-            "category":       "User Profile",
-            "description":    p["voice_sample"],
-            # Extra metadata stored as payload in Qdrant
-            "review_count":   p["review_count"],
-            "verified_count": p["verified_count"],
-            "rating_stats":   p["rating_stats"],
-            "category_pref":  p["category_pref"],
-            "vocab_fingerprint": list(p["vocab_fingerprint"].keys()),
-            "sample_reviews": [r["body"] for r in p["train_reviews"][:5]],
-        })
+        items.append(
+            {
+                "id": p["user_id"],
+                "name": p["name"],
+                "category": "User Profile",
+                "description": p["voice_sample"],
+                # Extra metadata stored as payload in Qdrant
+                "review_count": p["review_count"],
+                "verified_count": p["verified_count"],
+                "rating_stats": p["rating_stats"],
+                "category_pref": p["category_pref"],
+                "vocab_fingerprint": list(p["vocab_fingerprint"].keys()),
+                "sample_reviews": [r["body"] for r in p["train_reviews"][:5]],
+            }
+        )
     return items
 
 
@@ -265,24 +343,30 @@ def main() -> None:
         description="Build per-user profiles from scraped Jumia reviews."
     )
     parser.add_argument(
-        "--raw-path", type=Path,
+        "--raw-path",
+        type=Path,
         default=DATA_DIR / "jumia_reviews.json",
         help="Path to the raw product-centric scrape output.",
     )
     parser.add_argument(
-        "--profiles-out", type=Path,
+        "--profiles-out",
+        type=Path,
         default=DATA_DIR / "user_profiles.json",
         help="Output path for the user-centric profile data.",
     )
     parser.add_argument(
-        "--items-out", type=Path,
+        "--items-out",
+        type=Path,
         default=DATA_DIR / "items.json",
         help="Output path for pipeline-ready items (fed into build_index.py).",
     )
     parser.add_argument(
-        "--min-reviews", type=int, default=10, metavar="N",
+        "--min-reviews",
+        type=int,
+        default=5,
+        metavar="N",
         help=(
-            "Only index users with at least N reviews (default: 10). "
+            "Only index users with at least N reviews (default: 5). "
             "Higher = richer voice model. Run a wider scrape if 0 users qualify."
         ),
     )
@@ -323,8 +407,12 @@ def main() -> None:
     for p in profiles[:5]:
         log.info(
             "  [%s] %-20s reviews=%-3d ratings: mean=%.2f std=%.2f skew=%.2f",
-            p["user_id"], p["name"][:20], p["review_count"],
-            p["rating_stats"]["mean"], p["rating_stats"]["std"], p["rating_stats"]["skew"]
+            p["user_id"],
+            p["name"][:20],
+            p["review_count"],
+            p["rating_stats"]["mean"],
+            p["rating_stats"]["std"],
+            p["rating_stats"]["skew"],
         )
 
     # Save full user profiles
@@ -339,7 +427,9 @@ def main() -> None:
         json.dump(items, f, ensure_ascii=False, indent=2)
     log.info("Saved %d pipeline items → %s", len(items), args.items_out)
 
-    log.info("\nNext → run:  PYTHONPATH=. python data/build_index.py --collection user_profiles")
+    log.info(
+        "\nNext → run:  PYTHONPATH=. python data/build_index.py --collection user_profiles"
+    )
 
 
 if __name__ == "__main__":

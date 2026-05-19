@@ -1,5 +1,6 @@
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class Item(BaseModel):
@@ -14,7 +15,7 @@ class SimulateReviewRequest(BaseModel):
 
 
 class SimulateReviewResponse(BaseModel):
-    rating: float          # was int — predicted_rating is always a float
+    rating: float  # was int — predicted_rating is always a float
     review: str
     naija_review: Optional[str] = None
 
@@ -23,6 +24,9 @@ class RecommendRequest(BaseModel):
     user_id: str
     context: str
     n: int = 10
+    persona_description: str = ""
+    session_history: List[dict] = Field(default_factory=list)
+    domain_filter: Optional[str] = None
 
 
 class Recommendation(BaseModel):

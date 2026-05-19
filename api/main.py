@@ -1,16 +1,17 @@
 import asyncio
 
 from fastapi import FastAPI, HTTPException
+
 from api.schemas import (
-    SimulateReviewRequest,
-    SimulateReviewResponse,
     RecommendRequest,
     RecommendResponse,
+    SimulateReviewRequest,
+    SimulateReviewResponse,
 )
-from graphs.task_a import user_modeling_agent   # correct export name
+from graphs.task_a import user_modeling_agent
 from graphs.task_b import task_b_graph
 
-app = FastAPI(title="DSN x BCT LLM Agent API")
+app = FastAPI(title="Ego User Modelling Agent API")
 
 
 @app.post("/simulate-review", response_model=SimulateReviewResponse)
@@ -20,14 +21,11 @@ async def simulate_review(request: SimulateReviewRequest):
     and generate a culturally-grounded simulated review.
     """
     initial_state = {
-        # Align with UserAgentState schema in graphs/task_a.py
         "user_persona": request.user_id,
         "item_metadata": request.item.model_dump(),
     }
 
     try:
-        # Run the synchronous LangGraph pipeline off the event loop
-        # to avoid blocking FastAPI's async worker.
         result = await asyncio.to_thread(user_modeling_agent.invoke, initial_state)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -47,6 +45,9 @@ async def recommend(request: RecommendRequest):
     initial_state = {
         "user_id": request.user_id,
         "context_text": request.context,
+        "persona_description": request.persona_description,
+        "session_history": request.session_history,
+        "domain_filter": request.domain_filter,
         "n": request.n,
     }
 
@@ -55,9 +56,29 @@ async def recommend(request: RecommendRequest):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return RecommendResponse(recommendations=result.get("ranked_recommendations", []))
+    recommendations = (
+        result.get("ranked_recommendations") or result.get("recommendations") or []
+    )
+
+    # Flatten if it's a list of lists (sometimes happens with certain LLM outputs)
+    if recommendations and isinstance(recommendations[0], list):
+        recommendations = [item for sublist in recommendations for item in sublist]
+
+    normalised = []
+    for rec in recommendations:
+        if isinstance(rec, dict):
+            normalised.append(
+                {
+                    "item_id": str(rec.get("item_id", "")),
+                    "name": str(rec.get("name", "Unknown")),
+                    "reason": str(rec.get("reason", rec.get("reasoning", ""))),
+                }
+            )
+
+    return RecommendResponse(recommendations=normalised)
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

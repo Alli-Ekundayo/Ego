@@ -20,6 +20,7 @@ def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     norm = np.linalg.norm(a) * np.linalg.norm(b)
     return float(dot / norm) if norm > 0 else 0.0
 
+
 def dot_product(v1: list[float], v2: list[float]) -> float:
     """
     Compute dot product between two vectors.

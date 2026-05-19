@@ -11,6 +11,7 @@ class UserProfile:
     history_vector: list[float] = field(default_factory=list)
     rating_stats: dict = field(default_factory=dict)
     category_pref: dict = field(default_factory=dict)
+    sample_reviews: list[str] = field(default_factory=list)
 
 
 def profile_from_payload(payload: dict) -> UserProfile:
@@ -22,6 +23,7 @@ def profile_from_payload(payload: dict) -> UserProfile:
         history_vector=list(payload.get("history_vector", [])),
         rating_stats=dict(payload.get("rating_stats", {})),
         category_pref=dict(payload.get("category_pref", {})),
+        sample_reviews=list(payload.get("sample_reviews", [])),
     )
 
 
@@ -45,4 +47,5 @@ def build_profile(user_id: str, reviews: list[dict]) -> UserProfile:
         history_vector=history_vector,
         rating_stats={"mean": mean_rating},
         category_pref={},
+        sample_reviews=texts[:5],
     )
