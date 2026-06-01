@@ -18,13 +18,17 @@ class EmbeddingModel:
 
     def __init__(self):
         """Initialize the embedding model and the persistent cache."""
-        self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self._model = None
 
-        # Initialize persistent cache in a 'cache' directory
         cache_path = Path(__file__).parent.parent / "scratch" / "cache" / "embeddings"
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache = Cache(str(cache_path))
-        self._max_cache_entries = 10000  # diskcache handles eviction
+
+    @property
+    def model(self):
+        if self._model is None:
+            self._model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        return self._model
 
     @staticmethod
     def _normalise_text(text: str) -> str:
@@ -34,7 +38,6 @@ class EmbeddingModel:
         """Convert a single text string to an embedding vector."""
         normalised = self._normalise_text(text)
 
-        # Check persistent cache
         if normalised in self.cache:
             return list(self.cache[normalised])
 

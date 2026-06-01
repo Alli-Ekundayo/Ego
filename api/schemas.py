@@ -1,12 +1,10 @@
-from typing import List, Optional
-
 from pydantic import BaseModel, Field
 
 
 class Item(BaseModel):
     name: str
     category: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class SimulateReviewRequest(BaseModel):
@@ -17,7 +15,6 @@ class SimulateReviewRequest(BaseModel):
 class SimulateReviewResponse(BaseModel):
     rating: float  # was int — predicted_rating is always a float
     review: str
-    naija_review: Optional[str] = None
 
 
 class RecommendRequest(BaseModel):
@@ -25,8 +22,8 @@ class RecommendRequest(BaseModel):
     context: str
     n: int = 10
     persona_description: str = ""
-    session_history: List[dict] = Field(default_factory=list)
-    domain_filter: Optional[str] = None
+    session_history: list[dict] = Field(default_factory=list)
+    domain_filter: str | None = None
 
 
 class Recommendation(BaseModel):
@@ -36,4 +33,40 @@ class Recommendation(BaseModel):
 
 
 class RecommendResponse(BaseModel):
-    recommendations: List[Recommendation]
+    recommendations: list[Recommendation]
+
+
+# ---------------------------------------------------------------------------
+# Catalogue browsing
+# ---------------------------------------------------------------------------
+
+
+class UserSummary(BaseModel):
+    user_id: str
+    name: str
+    review_count: int
+    top_category: str
+    mean_rating: float
+
+
+class ProductSummary(BaseModel):
+    id: str
+    name: str
+    category: str
+    description: str | None = None
+    mean_rating: float
+    review_count: int
+
+
+class PaginatedUsers(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[UserSummary]
+
+
+class PaginatedProducts(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[ProductSummary]

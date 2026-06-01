@@ -57,40 +57,64 @@ class TestEmbeddingCaching:
 
 
 class TestVectorStoreCaching:
-    def test_get_user_profile_uses_cache(self):
-        with patch("qdrant_client.QdrantClient") as mock_qdrant:
-            client = MagicMock()
-            client.scroll.return_value = (
-                [SimpleNamespace(payload={"id": "u1", "name": "User"})],
-                None,
+    def test_get_user_profile_uses_cache(self, tmp_path):
+        from unittest.mock import patch
+        
+        temp_dir = str(tmp_path / "turbovec")
+        with patch("core.config.settings.TURBOVEC_STORAGE_DIR", temp_dir):
+            vector_store = _fresh_import("core.vector_store")
+            
+            from core.utils import to_vector_id
+            qid = to_vector_id("u1")
+            
+            vector_store.vector_store.upsert(
+                collection_name="user_profiles",
+                ids=[qid],
+                vectors=[[0.1] * 384],
+                payloads=[{"id": "u1", "name": "User"}]
             )
-            mock_qdrant.return_value = client
+            
+            with patch.object(vector_store.vector_store, "_get_db", wraps=vector_store.vector_store._get_db) as mock_db:
+                first = vector_store.get_user_profile("u1")
+                second = vector_store.get_user_profile("u1")
+                
+                assert first == {"id": "u1", "name": "User"}
+                assert first is not second
+                assert mock_db.call_count == 1
+
+    def test_upsert_clears_user_profile_cache(self, tmp_path):
+        from unittest.mock import patch
+        
+        temp_dir = str(tmp_path / "turbovec")
+        with patch("core.config.settings.TURBOVEC_STORAGE_DIR", temp_dir):
             vector_store = _fresh_import("core.vector_store")
-
-        first = vector_store.get_user_profile("u1")
-        second = vector_store.get_user_profile("u1")
-
-        assert first == second
-        assert first is not second
-        assert client.scroll.call_count == 1
-
-    def test_upsert_clears_user_profile_cache(self):
-        with patch("qdrant_client.QdrantClient") as mock_qdrant:
-            client = MagicMock()
-            client.scroll.return_value = ([SimpleNamespace(payload={"id": "u1"})], None)
-            mock_qdrant.return_value = client
-            vector_store = _fresh_import("core.vector_store")
-
-        _ = vector_store.get_user_profile("u1")
-        vector_store.vector_store.upsert(
-            collection_name="user_profiles",
-            ids=[1],
-            vectors=[[0.1, 0.2]],
-            payloads=[{"id": "u1"}],
-        )
-        _ = vector_store.get_user_profile("u1")
-
-        assert client.scroll.call_count == 2
+            
+            from core.utils import to_vector_id
+            qid = to_vector_id("u1")
+            
+            vector_store.vector_store.upsert(
+                collection_name="user_profiles",
+                ids=[qid],
+                vectors=[[0.1] * 384],
+                payloads=[{"id": "u1", "name": "User"}]
+            )
+            
+            with patch.object(vector_store.vector_store, "_get_db", wraps=vector_store.vector_store._get_db) as mock_db:
+                _ = vector_store.get_user_profile("u1")
+                
+                vector_store.vector_store.upsert(
+                    collection_name="user_profiles",
+                    ids=[qid],
+                    vectors=[[0.1] * 384],
+                    payloads=[{"id": "u1", "name": "User Updated"}]
+                )
+                
+                _ = vector_store.get_user_profile("u1")
+                
+                # 1st get_user_profile (1 call to _get_db)
+                # upsert (1 call to _get_db)
+                # 2nd get_user_profile (1 call to _get_db)
+                assert mock_db.call_count == 3
 
 
 class TestSafeDeserialization:
@@ -117,7 +141,6 @@ class TestSafeDeserialization:
 
         from core.utils import safe_loads_langchain
 
-        # Unsafe payload attempting to instantiate a chat model
         payload = """{
           "lc": 1,
           "type": "constructor",

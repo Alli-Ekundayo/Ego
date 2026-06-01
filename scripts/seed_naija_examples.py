@@ -2,16 +2,16 @@
 scripts/seed_naija_examples.py
 ------------------------------
 Reads data/jumia_reviews.json and indexes individual review bodies into the
-'naija_style_examples' Qdrant collection. This allows the NaijaAgent to
+'naija_style_examples' Turbovec collection. This allows the NaijaAgent to
 retrieve authentic Nigerian review voices for RAG-based style transfer.
 """
 
-import hashlib
 import json
 import logging
 from pathlib import Path
 
 from core.embeddings import embedding_model
+from core.utils import to_vector_id as _to_vector_id
 from core.vector_store import vector_store
 
 log = logging.getLogger(__name__)
@@ -24,9 +24,6 @@ COLLECTION_NAME = "naija_style_examples"
 VECTOR_SIZE = 384  # all-MiniLM-L6-v2
 BATCH_SIZE = 32
 
-
-def _to_qdrant_id(text: str) -> int:
-    return int(hashlib.md5(text.encode()).hexdigest(), 16) % (10**12)
 
 
 def seed_naija_examples():
@@ -65,7 +62,7 @@ def seed_naija_examples():
         batch = all_reviews[i : i + BATCH_SIZE]
         texts = [b["text"] for b in batch]
         vectors = embedding_model.embed_batch(texts)
-        ids = [_to_qdrant_id(b["text"]) for b in batch]
+        ids = [_to_vector_id(b["text"]) for b in batch]
 
         vector_store.upsert(COLLECTION_NAME, ids, vectors, batch)
         indexed += len(batch)

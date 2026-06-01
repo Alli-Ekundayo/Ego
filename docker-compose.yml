@@ -1,26 +1,84 @@
 services:
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    image: ego-frontend:latest
+    container_name: ego-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./data:/usr/share/nginx/html/data:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/index.html" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - ego-network
+
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ego-api:latest
+    container_name: ego-api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      qdrant:
-        condition: service_healthy   # wait until Qdrant is ready, not just started
-
-  qdrant:
-    image: qdrant/qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gemma-4-26b-a4b-it}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - HF_HOME=/app/scratch/cache/huggingface
     volumes:
-      - ./qdrant_storage:/qdrant/storage
+      - .:/app
+      - llm_cache:/app/scratch/cache
+      - ./data:/app/data:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:6333/health || exit 1"]
-      interval: 5s
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 15s
       timeout: 5s
-      retries: 12
-      start_period: 10s
+      retries: 10
+      start_period: 150s
+    networks:
+      - ego-network
+
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: ego-api:latest
+    container_name: ego-indexer
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-gemma-4-26b-a4b-it}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - DATASET_BASE_URL=${DATASET_BASE_URL}
+      - HF_HOME=/app/scratch/cache/huggingface
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    command: [ "python", "scripts/ingest.py", "--index" ]
+    profiles:
+      - tools
+    networks:
+      - ego-network
+
+
+
+volumes:
+  llm_cache:
+
+networks:
+  ego-network:
+    driver: bridge

@@ -13,11 +13,10 @@ search (match exact category / brand tokens).
 from __future__ import annotations
 
 import logging
-import re
+
+from core.utils import tokenize as _tokenize
 
 log = logging.getLogger(__name__)
-
-# ── Hard-coded taxonomy of common product aspect keywords ─────────────────────
 
 _ASPECT_PATTERNS: dict[str, list[str]] = {
     "Battery Life": ["battery", "charge", "charging", "power", "mah", "standby"],
@@ -113,9 +112,6 @@ _ASPECT_PATTERNS: dict[str, list[str]] = {
 }
 
 
-def _tokenize(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", (text or "").lower())
-
 
 def extract_aspects_rule_based(item_metadata: dict) -> list[str]:
     """
@@ -130,7 +126,6 @@ def extract_aspects_rule_based(item_metadata: dict) -> list[str]:
         item_metadata.get("category", ""),
         item_metadata.get("description", ""),
     ]
-    # Support a 'features' list (["Feature: value", ...])
     for feat in item_metadata.get("features", []):
         text_parts.append(str(feat))
 
@@ -197,17 +192,14 @@ def extract_sparse_keywords(item_metadata: dict, aspects: list[str]) -> list[str
     """
     tokens: list[str] = []
 
-    # Category and name tokens (alphabetic only, ≥ 3 chars)
     for field in ("name", "category", "brand"):
         val = item_metadata.get(field, "")
         tokens.extend(w for w in _tokenize(val) if len(w) >= 3)
 
-    # Aspect-specific keywords
     for asp in aspects:
         kws = _ASPECT_PATTERNS.get(asp, [])
-        tokens.extend(kws[:3])  # top-3 keywords per aspect
+        tokens.extend(kws[:3])
 
-    # De-duplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []
     for t in tokens:

@@ -10,7 +10,6 @@ Pipeline:
           → END
 """
 
-import json
 import logging
 import time
 from pathlib import Path
@@ -29,43 +28,19 @@ from core.config import settings
 from core.embeddings import embedding_model
 from core.llm import get_llm
 from core.math_utils import cosine_similarity
+from core.profiles import profiles_by_user_id as _load_profiles_dict
 from core.utils import (
     clean_review_text,
-    to_qdrant_id,
     to_stable_id,
+    to_vector_id,
     tokenize,
 )
 from core.vector_store import vector_store
 
 log = logging.getLogger(__name__)
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
 MAX_REVIEW_CHARS = 300
 MAX_EXAMPLES = 10
-
-# ── Module-level profile cache ─────────────────────────────────────────────────
-
-_profiles_cache: list[dict] | None = None
-_PROFILES_PATH = Path(__file__).parent.parent / "data" / "user_profiles.json"
-
-
-def _load_profiles() -> list[dict]:
-    global _profiles_cache
-    if _profiles_cache is None:
-        try:
-            with open(_PROFILES_PATH, encoding="utf-8") as f:
-                _profiles_cache = json.load(f)
-            log.info(
-                "Loaded %d user profiles from %s", len(_profiles_cache), _PROFILES_PATH
-            )
-        except Exception as exc:
-            log.warning("Could not load user_profiles.json: %s", exc)
-            _profiles_cache = []
-    return _profiles_cache
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
 
 
 def _embedding_dim() -> int:
@@ -117,9 +92,6 @@ def _build_style_profile(reviews: list[dict]) -> str:
     )
 
 
-# ── State ──────────────────────────────────────────────────────────────────────
-
-
 class UserAgentState(TypedDict):
     user_persona: str
     item_metadata: dict
@@ -128,20 +100,16 @@ class UserAgentState(TypedDict):
     user_embedding: list[float]
     item_embedding: list[float]
     retrieved_examples: list[dict]
-    example_embeddings: list[list[float]]  # Cached embeddings to avoid re-computation
+    example_embeddings: list[list[float]]
     predicted_rating: float
     style_profile: str
     simulated_review: str
     final_review: str
     avg_length: int
     naija_examples: list[dict]
-    # Aspect extraction outputs
-    extracted_aspects: list[str]  # e.g. ["Battery Life", "Price / Value"]
-    aspect_queries: list[str]  # natural-language queries per aspect
-    sparse_keywords: list[str]  # BM25 keyword tokens
-
-
-# ── Nodes ──────────────────────────────────────────────────────────────────────
+    extracted_aspects: list[str]
+    aspect_queries: list[str]
+    sparse_keywords: list[str]
 
 
 def profile_retrieval_node(state: UserAgentState) -> dict:
@@ -149,31 +117,31 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
     user_persona = state.get("user_persona", "Unknown")
     item_metadata = state.get("item_metadata", {})
 
-    # Step 1: Derive stable ID
-    user_id = to_stable_id(user_persona)
+    profiles_dict = _load_profiles_dict()
+    if user_persona in profiles_dict:
+        user_id = user_persona
+    else:
+        user_id = to_stable_id(user_persona)
 
-    # Step 2: Fetch profile from Qdrant
-    qid = to_qdrant_id(user_id)
+    qid = to_vector_id(user_id)
     try:
         res = vector_store.retrieve_by_id("user_profiles", [qid], with_vectors=True)
         if not res:
-            raise ValueError(f"User '{user_persona}' not found in Qdrant.")
+            raise ValueError(f"User '{user_persona}' not found in Turbovec.")
         user_profile = res[0].payload
         user_embedding = res[0].vector
     except Exception as exc:
         log.warning(
-            "Qdrant lookup failed for '%s': %s — using fallback.", user_persona, exc
+            "Turbovec lookup failed for '%s': %s — using fallback.", user_persona, exc
         )
         user_profile = {"name": user_persona, "sample_reviews": []}
         user_embedding = [0.0] * _embedding_dim()
 
-    # Step 3: Aspect extraction from target item metadata
     extracted_aspects = extract_aspects_rule_based(item_metadata)
     aspect_queries = aspects_to_query_strings(extracted_aspects, item_metadata)
     sparse_keywords = extract_sparse_keywords(item_metadata, extracted_aspects)
     log.info("  ↳ Extracted aspects: %s", extracted_aspects)
 
-    # Step 4: Embed target item — use first aspect query for richer signal
     item_text = " ".join(
         filter(
             None,
@@ -187,12 +155,10 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
     )
     item_embedding = embedding_model.embed_text(item_text)
 
-    # Step 5: Dense Semantic Search — rank historical reviews by aspect-enriched similarity
     retrieved_examples: list[dict] = []
     example_embeddings: list[list[float]] = []
     try:
-        all_profiles = _load_profiles()
-        full_profile = next((p for p in all_profiles if p["user_id"] == user_id), None)
+        full_profile = profiles_dict.get(user_id)
         if full_profile:
             train_reviews = full_profile.get("train_reviews", [])
             if train_reviews:
@@ -202,7 +168,6 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
                 ]
                 review_embs = embedding_model.embed_batch(review_texts)
 
-                # Score reviews against each aspect query, take max across aspects
                 aspect_embs = (
                     embedding_model.embed_batch(aspect_queries)
                     if aspect_queries
@@ -213,7 +178,6 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
                     base = cosine_similarity(review_emb, item_embedding)
                     if not aspect_embs:
                         return base
-                    # Boost by max similarity to any aspect query embedding
                     aspect_boost = max(
                         cosine_similarity(review_emb, aq_emb) for aq_emb in aspect_embs
                     )
@@ -230,7 +194,6 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
     except Exception as exc:
         log.warning("Could not rank reviews: %s", exc)
 
-    # Step 5: Retrieve Naija voice examples
     naija_examples = []
     try:
         naija_results = vector_store.search(
@@ -293,7 +256,7 @@ def style_analysis_node(state: UserAgentState) -> dict:
     """Task A - Node 3: User Writing Style Analysis"""
     reviews = state.get("retrieved_examples", [])
     if not reviews:
-        return {"style_profile": _build_style_profile(reviews)}
+        return {"style_profile": "Neutral style. Short-to-medium sentences with direct wording."}
 
     prompt = ChatPromptTemplate.from_template(
         "Analyze the user's writing style from these review snippets.\n"
@@ -320,11 +283,10 @@ def review_generation_node(state: UserAgentState) -> dict:
     item_category = item.get("category", "Unknown category")
     item_description = item.get("description", "")
 
-    # Few-shot examples
     few_shot_blocks = []
     for ex in examples[:5]:
         title = ex.get("title", "").strip()
-        body = ex.get("body", "").strip()
+        body = ex.get("body", "").strip()[:MAX_REVIEW_CHARS]
         review = f"{title} {body}".strip()
         if review:
             few_shot_blocks.append(
@@ -336,7 +298,6 @@ def review_generation_node(state: UserAgentState) -> dict:
         else "- No historical examples available."
     )
 
-    # Naija voice examples
     naija_examples = state.get("naija_examples", [])
     naija_blocks = []
     for nx in naija_examples:
@@ -347,7 +308,6 @@ def review_generation_node(state: UserAgentState) -> dict:
         "\n".join(naija_blocks) if naija_blocks else "- No local examples available."
     )
 
-    # Aspect context for LLM prompt
     extracted_aspects = state.get("extracted_aspects", [])
     aspect_hint = (
         f"Key aspects to address in the review: {', '.join(extracted_aspects)}.\n"
@@ -360,8 +320,8 @@ def review_generation_node(state: UserAgentState) -> dict:
         "Write ONE new review for the unseen target item in the user's voice.\n"
         "Do not copy any example verbatim. Reuse style patterns naturally.\n"
         "The review must match the target rating sentiment and mention the target item context.\n"
-        "Incorporate authentic 'Naija' (Nigerian) customer flavor (e.g. Pidgin, local phrases) "
-        "as shown in the local examples below.\n"
+        "Add a subtle and natural 'Naija' (Nigerian) nuance to the writing style (e.g. slight local phrasing or vocabulary) "
+        "as shown in the local examples below, but avoid making it exaggerated or overly thick.\n"
         "{aspect_hint}\n"
         "Return plain text only.\n\n"
         "User style profile:\n{style_profile}\n\n"
@@ -414,9 +374,6 @@ def review_generation_node(state: UserAgentState) -> dict:
             log.warning("Review generation fell back: %s", last_error)
 
     return {"final_review": final_review, "simulated_review": final_review}
-
-
-# ── Graph Construction ─────────────────────────────────────────────────────────
 
 
 def build_user_modeling_agent():

@@ -5,7 +5,7 @@ Hybrid Retrieval Agent: combines Dense Semantic Search and Sparse BM25 keyword
 search via Reciprocal Rank Fusion, then returns a merged candidate list.
 
 Retrieval strategy:
-  1. Dense Semantic Search  — Qdrant ANN over user history vectors
+  1. Dense Semantic Search  — Turbovec ANN over user history vectors
                               (captures latent taste similarity)
   2. Collaborative Filtering (CF) — cosine similarity over cross-domain
                               projected user vectors
@@ -15,7 +15,6 @@ Retrieval strategy:
                               via Reciprocal Rank Fusion
 """
 
-import json
 import logging
 from collections import defaultdict
 from functools import cached_property
@@ -25,10 +24,22 @@ import numpy as np
 from core.embeddings import embedding_model
 from core.hybrid_search import hybrid_search
 from core.math_utils import cosine_similarity
+from core.profiles import profiles_by_user_id as _load_profiles_dict
 from core.utils import normalise_category, tokenize
 from core.vector_store import vector_store
 
 log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Scoring blend weights (named constants for easy ablation / tuning)
+# ---------------------------------------------------------------------------
+_DENSE_BLEND_WEIGHT: float = 0.65     # dense semantic score weight in merged score
+_CF_BLEND_WEIGHT: float = 0.35        # collaborative-filtering score weight in merged score
+_CF_ONLY_SEMANTIC_WEIGHT: float = 0.4 # CF-only path: semantic component
+_CF_ONLY_CF_WEIGHT: float = 0.6       # CF-only path: CF component
+_RECENT_SELF_BOOST: float = 2.5       # multiplier for items from the user's own recent reviews
+_RRF_MULTI_SOURCE_BOOST: float = 1.1  # RRF score boost when a candidate appears in multiple sources
+_CROSS_DOMAIN_REG: float = 0.05       # L2 regularisation for cross-domain projection (ridge regression)
 
 
 def _category_matches(item_category: str, domain_filter: str | None) -> bool:
@@ -40,23 +51,22 @@ def _category_matches(item_category: str, domain_filter: str | None) -> bool:
 
 
 class RetrievalAgent:
-    def __init__(self):
-        self._profiles_db = None
-        self._cross_domain_projection = None
-        self._user_vectors = None
-        self._cluster_centroids = None
+    # All properties use @cached_property; no manual instance initialisation needed.
 
     @property
     def profiles_db(self) -> dict[str, dict]:
-        if self._profiles_db is None:
-            try:
-                with open("data/user_profiles.json", "r", encoding="utf-8") as f:
-                    profiles = json.load(f)
-                self._profiles_db = {p["user_id"]: p for p in profiles}
-            except Exception as exc:
-                log.error("Failed to load user profiles: %s", exc)
-                self._profiles_db = {}
-        return self._profiles_db
+        """
+        Return the current user profile dict.
+
+        Delegates to core.profiles on every access so that mtime-based
+        invalidation in profiles.py is always honoured — prevents serving
+        a stale snapshot if user_profiles.json is rebuilt at runtime.
+
+        user_vectors / cluster_centroids / cross_domain_projection are still
+        @cached_property (expensive batch embeddings), so they stay stable
+        within a process lifetime. A server restart picks up all changes.
+        """
+        return _load_profiles_dict()
 
     @cached_property
     def user_vectors(self) -> dict[str, list[float]]:
@@ -194,7 +204,6 @@ class RetrievalAgent:
         seen_semantic: set[str] = set()
         seen_cf: set[str] = set()
 
-        # ── 1. Dense semantic search ──────────────────────────────────────────
         if user_id and user_id in self.profiles_db:
             own_profile = self.profiles_db.get(user_id, {})
             for review in own_profile.get("test_reviews", []):
@@ -231,7 +240,6 @@ class RetrievalAgent:
                 )
             )
 
-        # ── 2. Collaborative filtering ────────────────────────────────────────
         projected_query = self._project_to_shared_space(query_vector)
         similarities = []
         for similar_user_id, user_vec in self.user_vectors.items():
@@ -246,7 +254,6 @@ class RetrievalAgent:
                 self._collect_user_items(similar_user_id, score, seen_cf)
             )
 
-        # ── 3. Merge dense + CF candidates (pre-hybrid) ───────────────────────
         merged: dict[str, dict] = {}
         for candidate in semantic_candidates:
             if not _category_matches(candidate.get("category", ""), domain_filter):
@@ -254,11 +261,11 @@ class RetrievalAgent:
             merged[candidate["item_id"]] = {
                 **candidate,
                 "retrieval_sources": ["dense"],
-                "score": 0.65 * float(candidate.get("semantic_score", 0.0))
-                + 0.35 * float(candidate.get("cf_score", 0.0)),
+                "score": _DENSE_BLEND_WEIGHT * float(candidate.get("semantic_score", 0.0))
+                + _CF_BLEND_WEIGHT * float(candidate.get("cf_score", 0.0)),
             }
             if candidate.get("retrieval_hint") == "recent_self":
-                merged[candidate["item_id"]]["score"] *= 2.5
+                merged[candidate["item_id"]]["score"] *= _RECENT_SELF_BOOST
 
         for candidate in cf_candidates:
             if not _category_matches(candidate.get("category", ""), domain_filter):
@@ -268,32 +275,30 @@ class RetrievalAgent:
                 merged[item_id]["retrieval_sources"].append("collaborative")
                 merged[item_id]["score"] = max(
                     float(merged[item_id].get("score", 0.0)),
-                    0.4 * float(candidate.get("semantic_score", 0.0))
-                    + 0.6 * float(candidate.get("cf_score", 0.0)),
+                    _CF_ONLY_SEMANTIC_WEIGHT * float(candidate.get("semantic_score", 0.0))
+                    + _CF_ONLY_CF_WEIGHT * float(candidate.get("cf_score", 0.0)),
                 )
                 continue
             merged[item_id] = {
                 **candidate,
                 "retrieval_sources": ["collaborative"],
-                "score": 0.4 * float(candidate.get("semantic_score", 0.0))
-                + 0.6 * float(candidate.get("cf_score", 0.0)),
+                "score": _CF_ONLY_SEMANTIC_WEIGHT * float(candidate.get("semantic_score", 0.0))
+                + _CF_ONLY_CF_WEIGHT * float(candidate.get("cf_score", 0.0)),
             }
 
         dense_ranked = sorted(
             merged.values(), key=lambda x: float(x.get("score", 0.0)), reverse=True
         )
 
-        # ── 4. Hybrid RRF fusion with sparse BM25 ────────────────────────────
         if sparse_keywords:
             fused = hybrid_search(
                 dense_results=dense_ranked,
                 sparse_keywords=sparse_keywords,
                 top_k=max(n * 3, 150),
             )
-            # Promote items appearing in both sources
             for item in fused:
                 if len(item.get("retrieval_sources", [])) >= 2:
-                    item["score"] = item.get("rrf_score", item.get("score", 0.0)) * 1.1
+                    item["score"] = item.get("rrf_score", item.get("score", 0.0)) * _RRF_MULTI_SOURCE_BOOST
                 else:
                     item["score"] = item.get("rrf_score", item.get("score", 0.0))
             ranked = sorted(
@@ -371,7 +376,6 @@ def _fallback_sparse_keywords(
     ):
         keywords.extend(tokenize(str(pref)))
 
-    # De-duplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []
     for kw in keywords:

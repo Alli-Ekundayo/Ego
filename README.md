@@ -1,515 +1,409 @@
-# Ego: Agentic Framework for Personalized Product Review Generation & Recommendations
+# Ego — Nigerian-Centric Recommendation System
 
-A sophisticated LLM-powered agentic system that generates culturally-grounded product reviews and delivers personalized recommendations. Built with **LangGraph**, **LangChain**, and **Qdrant**, Ego combines user profiling, semantic similarity, and multi-agent workflows to produce authentic product feedback.
-
-## 🎯 Overview
-
-Ego solves two key challenges in e-commerce:
-
-1. **Task A: Personalized Review Generation**
-   - Predict ratings based on user history and item context
-   - Generate reviews in the user's authentic voice
-   - Inject culturally-grounded language (Nigerian Pidgin for Naija context)
-
-2. **Task B: Smart Recommendations**
-   - Retrieve candidate items using semantic search
-   - Re-rank with LLM-powered reasoning
-   - Handle cold-start users with synthetic profiles
-
-### Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     FastAPI Endpoint                         │
-│  POST /simulate-review    |    POST /recommend              │
-└────────────┬──────────────────────────────┬─────────────────┘
-             │                              │
-    ┌────────▼──────────┐        ┌─────────▼──────────┐
-    │    Task A Graph   │        │   Task B Graph     │
-    │  (Review Gen)     │        │ (Recommendations)  │
-    └────────┬──────────┘        └─────────┬──────────┘
-             │                              │
-    ┌────────▼──────────┐        ┌─────────▼──────────┐
-    │  5 Workflow Nodes │        │  5 Workflow Nodes  │
-    │  • Profile        │        │  • Load Profile    │
-    │  • Rating         │        │  • Cold-Start      │
-    │  • Style          │        │  • Context Extract │
-    │  • Generation     │        │  • Retrieve        │
-    └────────┬──────────┘        │  • Rerank          │
-             │                   └─────────┬──────────┘
-             │                             │
-    ┌────────▼─────────────────────────────▼───────────┐
-    │         Shared Core Infrastructure               │
-    │                                                  │
-    │  • LLM Layer: Google Generative AI (cached)     │
-    │  • Embeddings: Sentence Transformers            │
-    │  • Vector Store: Qdrant (user profiles, items)  │
-    │  • Config & Validation: Pydantic                │
-    └──────────────────────────────────────────────────┘
-```
-
-## 📁 Project Structure
-
-```
-Ego/
-├── api/                      # FastAPI application
-│   ├── main.py              # Route handlers
-│   └── schemas.py           # Request/response models
-│
-├── graphs/                   # LangGraph workflow definitions
-│   ├── task_a.py            # Review generation pipeline
-│   └── task_b.py            # Recommendation pipeline
-│
-├── agents/                   # Individual agent implementations
-│   ├── naija_agent.py       # Nigerian cultural voice injection
-│   ├── rating_agent.py      # Rating prediction algorithm
-│   ├── retrieval_agent.py   # Candidate retrieval
-│   ├── rerank_agent.py      # LLM-based re-ranking
-│   ├── style_agent.py       # User writing style analysis
-│   └── __init__.py          # Agent module exports
-│
-├── core/                     # Shared infrastructure
-│   ├── config.py            # Settings & validation
-│   ├── llm.py               # Cached LLM instance
-│   ├── embeddings.py        # Embedding model wrapper
-│   ├── vector_store.py      # Qdrant client wrapper
-│   ├── user_profile.py      # Profile data structures
-│   ├── math_utils.py        # Cosine similarity, etc.
-│   └── __init__.py
-│
-├── data/                     # Static data & profiles
-│   └── user_profiles.json   # Pre-built user profiles
-│
-├── tests/                    # Test suite
-│   └── test_api.py
-│
-├── scripts/                  # Utility scripts
-│   ├── build_user_profiles.py
-│   ├── seed_naija_examples.py
-│   └── evaluate.py
-│
-├── requirements.txt          # Python dependencies
-├── conftest.py              # Pytest configuration
-├── docker-compose.yml       # Qdrant + app services
-└── Dockerfile               # Container image
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.12+
-- Docker & Docker Compose (for Qdrant)
-- Google API key (for Google Generative AI)
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Alli-Ekundayo/Ego.git
-   cd Ego
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment**
-   ```bash
-   cp .env.example .env  # (or create manually)
-   # Edit .env with your Google API key and other settings
-   ```
-
-5. **Start Qdrant vector store**
-   ```bash
-   docker-compose up -d qdrant
-   ```
-
-6. **Run the API server**
-   ```bash
-   python -m uvicorn api.main:app --reload --port 8000
-   ```
-
-   The API will be available at `http://localhost:8000`
-
-### First Test
-
-**Generate a review** (Task A):
-```bash
-curl -X POST "http://localhost:8000/simulate-review" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "john_doe",
-    "item": {
-      "name": "Samsung 65-inch TV",
-      "category": "Electronics",
-      "description": "4K Smart TV with HDR support"
-    }
-  }'
-```
-
-Expected response:
-```json
-{
-  "rating": 4.2,
-  "review": "The picture quality is impressive...",
-  "naija_review": "Abeg, this TV is serious! E don blow my mind with the clarity..."
-}
-```
-
-**Get recommendations** (Task B):
-```bash
-curl -X POST "http://localhost:8000/recommend" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "john_doe",
-    "context": "I need good earbuds for gaming",
-    "n": 5
-  }'
-```
-
-## 🔧 Core Components
-
-### 1. Task A: Review Generation Pipeline
-
-Located in `graphs/task_a.py` — a 4-node LangGraph workflow:
-
-**Node Sequence:**
-```
-1. profile_retrieval_node
-   └─ Load user profile & embeddings from Qdrant
-   └─ Rank historical reviews by semantic similarity to target item
-   └─ Fetch Nigerian voice examples for style injection
-
-2. rating_prediction_node
-   └─ Compute similarity-weighted average of past ratings
-   └─ Blend with user's historical mean (70/30 split)
-   └─ Clamp to [1.0, 5.0] range
-
-3. style_analysis_node
-   └─ Analyze user's writing patterns (sentence length, tone, phrases)
-   └─ Generate a 2-3 sentence style profile
-   └─ Falls back to statistical analysis if LLM unavailable
-
-4. review_generation_node
-   └─ Use few-shot examples to generate review in user's voice
-   └─ Ensure review sentiment matches predicted rating
-   └─ Include retry logic (3 attempts with exponential backoff)
-```
-
-**Key Features:**
-- **Similarity-weighted rating**: Uses semantic embeddings to weight similar past reviews
-- **Style consistency**: Analyzes and reproduces user's writing patterns
-- **Fallback resilience**: Graceful degradation if services fail
-- **Character truncation**: Keeps prompts within token budget
-
-### 2. Task B: Recommendation Pipeline
-
-Located in `graphs/task_b.py` — a 5-node LangGraph workflow with conditional routing plus multi-turn refinement:
-
-**Node Sequence:**
-```
-1. context_extraction_node
-   └─ Parse persona + conversation history into explicit and implicit preference signals
-   └─ Extract current context fields (mood, occasion, location)
-   └─ Infer domain and respect explicit domain filters
-
-2. candidate_retrieval_node
-   └─ Dual retrieval:
-      ├─ Semantic similarity via Qdrant user/item embedding search
-      └─ Collaborative filtering from similar users' liked items
-   └─ Merge and deduplicate into top-20 candidates
-
-3. cold_start_node (conditional)
-   └─ Map persona demographics/preferences to nearest user cluster
-   └─ Use cluster centroid as proxy embedding for new users
-   └─ Project cross-domain signals through a learned linear map
-
-4. reranking_node
-   └─ Prompt LLM with profile + context + candidates
-   └─ Return personalized top-10 with one-sentence reasoning each
-
-5. multiturn_node
-   └─ Handles conversational refinements ("actually ...", "more ...")
-   └─ Re-retrieves and reranks with updated context using graph state memory
-```
-
-**Key Features:**
-- **Cold-start handling**: Graceful fallback for new users
-- **Cross-domain**: Can recommend across categories
-- **Context-aware**: Parses natural language requests
-- **Personalized reasoning**: LLM explains why each item is recommended
-
-### 3. Agent Implementations
-
-#### Rating Agent (`agents/rating_agent.py`)
-Predicts user ratings using a hybrid algorithm:
-- **Content-based**: Cosine similarity between user & item embeddings
-- **Collaborative**: Weighted average of similar historical ratings
-- **User-specific**: Adjusts for rating distribution (mean, std, skew)
-
-#### Naija Agent (`agents/naija_agent.py`)
-Injects culturally-grounded Nigerian voice:
-- Retrieves authentic Naija-style examples from vector store
-- Uses style guides to match tone and phrasing
-- Preserves core sentiment and rating
-
-#### Retrieval Agent (`agents/retrieval_agent.py`)
-Dual-path candidate retrieval:
-- Warm users: Semantic search over personal history
-- Cold users: Query expansion + generic item search
-
-#### Rerank Agent (`agents/rerank_agent.py`)
-LLM-powered personalization:
-- Scores candidates by relevance to user profile & context
-- Generates natural language reasoning for each item
-- Respects category filters and user preferences
-
-#### Style Agent (`agents/style_agent.py`)
-Analyzes writing patterns:
-- Tokenizes reviews to detect repeated phrases
-- Computes average sentence length
-- Generates statistical or LLM-based style profiles
-
-### 4. Core Infrastructure
-
-#### `core/llm.py`
-- **Cached LLM instance**: Uses `lru_cache` to reuse ChatGoogleGenerativeAI across all agents
-- **Temperature control**: Supports different temperatures for different tasks
-- **Fallback safety**: Gracefully handles missing API keys in testing
-
-#### `core/embeddings.py`
-- Wraps SentenceTransformers for consistent embedding generation
-- Supports batch embedding for efficiency
-- Maintains embedding dimension info for fallback logic
-
-#### `core/vector_store.py`
-- Qdrant client wrapper with convenient methods
-- `search()`: Semantic search by vector
-- `retrieve_by_id()`: Direct ID-based lookups
-- `upsert()`: Batch insertion of documents
-
-#### `core/config.py`
-- Pydantic-based settings management
-- Environment variable support with defaults
-- Secret value masking for API keys
-
-## 📊 Workflow Details
-
-### How Review Generation Works (Task A)
-
-1. **Input**: User persona + item metadata
-2. **Step 1 - Profile Retrieval**:
-   - Compute stable MD5 hash of user name
-   - Load user profile + embeddings from Qdrant
-   - Fetch top-10 similar historical reviews (by cosine similarity)
-   - Retrieve Nigerian voice examples
-
-3. **Step 2 - Rating Prediction**:
-   - Weight each similar review by its similarity score
-   - Compute weighted average rating
-   - Blend with user's historical mean (70% local, 30% global)
-   - Clamp result to [1.0, 5.0]
-
-4. **Step 3 - Style Analysis**:
-   - Tokenize user's past reviews
-   - Compute average sentence length and bigram frequencies
-   - Use LLM to generate style description (or fallback to statistical profile)
-
-5. **Step 4 - Review Generation**:
-   - Use few-shot examples (up to 5 similar reviews)
-   - Prompt LLM to generate new review matching rating & style
-   - Retry up to 3 times with 2s, 4s backoff
-   - Clean output by removing markdown, truncating sections
-
-6. **Output**: Predicted rating + simulated review (both English & Nigerian-flavored)
-
-### How Recommendations Work (Task B)
-
-1. **Input**: User ID + context text + optional filters
-2. **Step 1 - Profile Loading**:
-   - Query Qdrant for user profile
-   - If not found, flag as cold-start
-
-3. **Step 2 - Branching**:
-   - Warm users: Proceed to context extraction
-   - Cold users: Build synthetic profile from persona
-
-4. **Step 3 - Context Extraction**:
-   - Parse user's request with LLM
-   - Extract primary domain (or use explicit filter)
-
-5. **Step 4 - Candidate Retrieval**:
-   - For warm users: Semantic search over personal history embeddings
-   - For cold users: Persona-based item search
-   - Return top-100 candidates
-
-6. **Step 5 - Re-ranking**:
-   - Score each candidate using LLM scorer
-   - Include personalized reasoning
-   - Return top-N sorted by relevance
-
-7. **Output**: Ranked list of recommendations with explanations
-
-## 🧪 Testing
-
-Run the test suite:
-```bash
-pytest tests/ -v
-```
-
-Run a specific test:
-```bash
-pytest tests/test_api.py::test_simulate_review -v
-```
-
-Smoke test the Task A graph:
-```bash
-cd graphs
-python task_a.py  # Runs the embedded __main__ test
-```
-
-## 🔐 Environment Variables
-
-Create a `.env` file in the project root:
-```env
-# Google API Configuration
-GOOGLE_API_KEY=your_google_api_key_here
-
-# Qdrant Configuration
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-
-# LLM Configuration
-LLM_MODEL=gemma-4-26b-a4b-it
-LLM_TEMPERATURE=0.7
-
-# Application Settings
-API_PORT=8000
-DEBUG=false
-```
-
-## 📚 Key Concepts
-
-### Embeddings
-- **What**: Dense vector representations of text
-- **Why**: Enable semantic similarity without keyword matching
-- **How**: Using SentenceTransformers (MiniLM for speed, all-mpnet for quality)
-
-### Vector Store (Qdrant)
-- **What**: Vector database for similarity search
-- **Why**: Fast retrieval of similar items & users
-- **Stored**: User profiles, item metadata, Naija style examples
-
-### LangGraph
-- **What**: Framework for building stateful, multi-agent workflows
-- **Why**: Handles complex branching, retries, and state management
-- **Used**: Define Task A & Task B as DAGs with typed state
-
-### Cosine Similarity
-- **Formula**: `cos(θ) = (A · B) / (||A|| × ||B||)`
-- **Range**: [-1, 1] where 1 = identical direction
-- **Application**: Weight historical reviews, rank candidates
-
-### Cold-Start Problem
-- **Problem**: New users have no history
-- **Solution**: Build synthetic profile from persona description
-- **Fallback**: Use generic item search + LLM re-ranking
-
-## 🛠️ Development
-
-### Adding a New Agent
-
-1. Create a new class in `agents/new_agent.py`:
-   ```python
-   from core.llm import get_llm
-   from core.config import settings
-
-   class NewAgent:
-       def __init__(self):
-           self.llm = get_llm(settings.LLM_MODEL)
-       
-       def process(self, input_data: dict) -> str:
-           # Implementation here
-           pass
-   
-   # Export singleton instance
-   new_agent = NewAgent()
-   ```
-
-2. Use in your workflow nodes:
-   ```python
-   from agents.new_agent import new_agent
-   
-   def my_node(state: MyState) -> dict:
-       result = new_agent.process(state["data"])
-       return {"result": result}
-   ```
-
-### Adding a New Workflow Node
-
-1. Define the node function (takes state, returns dict):
-   ```python
-   def new_node(state: MyState) -> dict:
-       """Process state and return updates."""
-       # Your logic here
-       return {"key": "value"}
-   ```
-
-2. Register in the graph:
-   ```python
-   workflow.add_node("new_node", new_node)
-   workflow.add_edge("previous_node", "new_node")
-   ```
-
-### Debugging Workflows
-
-Enable debug logging:
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-Trace execution step-by-step:
-```python
-result = graph.invoke(initial_state)
-# Check intermediate state in result
-```
-
-## 📈 Performance Considerations
-
-- **Embedding Batch Size**: Default 10 for memory efficiency
-- **Vector Search Limit**: Default 3-10 similar items to reduce noise
-- **Review Character Limit**: 300 chars per review to stay within token budget
-- **LLM Retry**: 3 attempts with exponential backoff (2s, 4s)
-- **Cache Duration**: LLM instances cached for entire process lifetime
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes with clear comments
-4. Add tests for new functionality
-5. Submit a pull request
-
-## 📝 License
-
-This project is licensed under the MIT License — see LICENSE file for details.
-
-## 🙋 Support
-
-For questions or issues:
-- Check existing GitHub issues
-- Review inline code comments for implementation details
-- Run tests to verify your setup
+> An agentic recommendation engine grounded in authentic Nigerian e-commerce language, built on LangGraph, Turbovec, and Google Gemini.
 
 ---
 
-**Built with ❤️ by the DSN x BCT LLM Agent team**
+## Overview
+
+**Ego** is a dual-task recommendation system designed for the Nigerian e-commerce context. It combines a user modelling pipeline (Task A) with a contextual recommendation pipeline (Task B), fusing dense semantic search, sparse BM25 keyword search, collaborative filtering, cross-encoder reranking, and LLM personalisation into a single coherent agentic workflow.
+
+The system is grounded in real Jumia product reviews scraped from the Nigerian market, giving the language models authentic vocabulary, slang, and cultural tone to draw on when generating reviews and recommendations.
+
+---
+
+## Architecture
+
+```
+                        ┌──────────────────────────────────────┐
+                        │             FastAPI (Port 8000)       │
+                        │  POST /simulate-review  POST /recommend│
+                        └──────────┬───────────────────┬────────┘
+                                   │                   │
+                          Task A Graph           Task B Graph
+                        (User Modelling)    (Recommendation)
+                               │                   │
+               ┌───────────────▼───┐   ┌───────────▼──────────────────┐
+               │ profile_retrieval │   │ load_profile_node            │
+               │ rating_prediction │   │ context_extraction_node      │
+               │ style_analysis    │   │ aspect_extraction_node       │
+               │ review_generation │   │ cold_start_node (if needed)  │
+               │ naija_injection   │   │ hybrid_retrieval_node        │
+               └───────────────────┘   │   ├─ Dense ANN (Turbovec)    │
+                                       │   ├─ Collaborative Filtering  │
+                                       │   └─ Sparse BM25 (RRF fusion) │
+                                       │ reranking_node               │
+                                       │   ├─ Cross-encoder Stage 1   │
+                                       │   └─ LLM Personalisation     │
+                                       │ multiturn_node               │
+                                       └──────────────────────────────┘
+```
+
+### Task A — User Modelling
+
+Simulates how a given user would rate and review a product.
+
+| Node | Purpose |
+|---|---|
+| `profile_retrieval_node` | Load the user's historical reviews from Turbovec |
+| `rating_prediction_node` | Predict a 1–5 star rating using persona similarity |
+| `style_analysis_node` | Extract writing style signals from past reviews |
+| `review_generation_node` | Generate a review with Gemini (RAG over past reviews) |
+| `naija_injection_node` | Rewrite the review in authentic Naija voice (RAG over Jumia examples) |
+
+### Task B — Contextual Recommendation
+
+Returns ranked product recommendations for a user given a conversational context.
+
+| Node | Purpose |
+|---|---|
+| `load_profile_node` | Load the user profile; detect cold-start |
+| `context_extraction_node` | Parse the user's request into structured signals (preferences, domain, mood) |
+| `aspect_extraction_node` | Extract product aspects and generate BM25 keyword tokens |
+| `cold_start_node` | Build a proxy embedding from the nearest user cluster (new users only) |
+| `hybrid_retrieval_node` | Dense ANN + Collaborative Filtering + BM25, fused via Reciprocal Rank Fusion |
+| `reranking_node` | Cross-encoder pre-rank → LLM personalisation pass |
+| `multiturn_node` | Conversational refinement: re-retrieves on detected preference shifts |
+
+---
+
+## Technical Stack
+
+| Component | Technology |
+|---|---|
+| Agent framework | [LangGraph](https://github.com/langchain-ai/langgraph) |
+| LLM | Google Gemini (`gemma-4-26b-a4b-it` by default, configurable) |
+| Embeddings | `all-MiniLM-L6-v2` via [SentenceTransformers](https://www.sbert.net/) |
+| Vector store | [Turbovec](https://pypi.org/project/turbovec/) |
+| Sparse retrieval | BM25 via `rank-bm25` |
+| Cross-encoder | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| API | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn |
+| LLM response cache | SQLite (`langchain_community.cache.SQLiteCache`) |
+| Embedding cache | `diskcache` (persistent, disk-backed) |
+| Python | 3.10+ |
+
+---
+
+## Project Structure
+
+```
+Ego/
+├── api/
+│   ├── main.py              # FastAPI app, startup preloading, route handlers
+│   └── schemas.py           # Pydantic request/response models
+│
+├── agents/
+│   ├── rerank_agent.py      # Two-stage reranker: cross-encoder + LLM
+│   ├── retrieval_agent.py   # Hybrid retrieval: Dense ANN + CF + BM25 (RRF)
+│   └── style_agent.py       # Writing style extractor (utility class)
+│
+├── core/
+│   ├── aspect_extractor.py  # Rule-based aspect extraction + sparse keyword tokens
+│   ├── config.py            # Pydantic settings (reads .env)
+│   ├── cross_encoder.py     # Cross-encoder scoring with persona intensity weighting
+│   ├── embeddings.py        # SentenceTransformer wrapper with diskcache
+│   ├── hybrid_search.py     # BM25 corpus builder + Reciprocal Rank Fusion
+│   ├── llm.py               # Gemini singleton with SQLite response caching
+│   ├── math_utils.py        # Cosine similarity, dot product
+│   ├── profiles.py          # Shared profile store (single JSON load, mtime-invalidated)
+│   ├── user_profile.py      # UserProfile dataclass + builder
+│   ├── utils.py             # tokenize, normalise_category, to_vector_id, clean_review_text
+│   └── vector_store.py      # Turbovec client wrapper (search, upsert)
+│
+├── graphs/
+│   ├── task_a.py            # LangGraph pipeline: User Modelling
+│   └── task_b.py            # LangGraph pipeline: Recommendation
+│
+├── scripts/
+│   ├── ingest.py            # Data pipeline: download → parse → build profiles
+│   ├── build_index.py       # Embed items.json and index into Turbovec
+│   ├── build_user_profiles.py # Aggregate reviews into per-user profile JSON
+│   ├── scrape_jumia.py      # Jumia review scraper (source of Naija training data)
+│   ├── seed_naija_examples.py # Index Jumia reviews into naija_style_examples collection
+│   ├── evaluate.py          # End-to-end eval harness (ROUGE, BERTScore, RMSE, NDCG)
+│   └── run_ablations.py     # Ablation study runner (no-BM25, no-cross-encoder variants)
+│
+├── tests/                   # Pytest test suite
+├── data/                    # user_profiles.json, items.json, jumia_reviews.json
+├── scratch/cache/           # SQLite LLM cache + diskcache embedding store
+├── Dockerfile               # Multi-stage build (builder → runtime, non-root user)
+├── docker-compose.yml       # Services: frontend, api, indexer (tools profile)
+├── Makefile                 # Developer workflow shortcuts
+└── requirements.txt         # Pinned Python dependencies
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Docker and Docker Compose
+- A [Google AI Studio](https://aistudio.google.com/) API key
+
+### 1. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set your API key:
+
+```dotenv
+GOOGLE_API_KEY=your_google_api_key_here
+LLM_MODEL=gemma-4-26b-a4b-it          # or any Gemini model you have access to
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+DATASET_BASE_URL=https://huggingface.co/datasets/DreamerX/Ego-Jumia-Review/resolve/main
+```
+
+### 2. Build and start services
+
+```bash
+make up
+```
+
+This starts three containers:
+
+| Container | Port | Purpose |
+|---|---|---|
+| `ego-api` | `8000` | FastAPI recommendation API |
+| `ego-frontend` | `3000` | Static evaluation dashboard |
+
+### 3. Run the data pipeline
+
+The indexer downloads the dataset, builds user profiles, and seeds Turbovec:
+
+```bash
+make index
+```
+
+> **Note:** This only needs to run once. Data is persisted in `./data/`. Use `make reindex` to force a full rebuild.
+
+### 4. Verify the API
+
+```bash
+curl http://localhost:8000/health
+# {"status": "ok"}
+```
+
+---
+
+## API Reference
+
+### `POST /simulate-review`
+
+Simulates how a specific user would rate and review a product.
+
+**Request:**
+```json
+{
+  "user_id": "user_042",
+  "item": {
+    "name": "Infinix Hot 40 Pro",
+    "category": "Smartphones",
+    "description": "6.78-inch display, 108MP camera, 5000mAh battery"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "rating": 4.2,
+  "review": "This phone is quite solid for the price. Battery lasts all day...",
+  "naija_review": "Chai, this phone don cast o! Battery life strong well well, camera clear like HD..."
+}
+```
+
+---
+
+### `POST /recommend`
+
+Returns personalised product recommendations for a user.
+
+**Request:**
+```json
+{
+  "user_id": "user_042",
+  "context": "I need a good pair of wireless earbuds for the gym",
+  "n": 5,
+  "persona_description": "budget-conscious tech lover",
+  "session_history": [],
+  "domain_filter": "electronics"
+}
+```
+
+**Response:**
+```json
+{
+  "recommendations": [
+    {
+      "item_id": "3f8a21bc",
+      "name": "JBL Tune 230NC TWS",
+      "reason": "Based on your preference for budget-friendly electronics, this offers excellent noise cancellation at a competitive price point."
+    }
+  ]
+}
+```
+
+**Parameters:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `user_id` | `string` | required | Stable user identifier |
+| `context` | `string` | required | Natural language request or query |
+| `n` | `int` | `10` | Number of recommendations (max 10) |
+| `persona_description` | `string` | `""` | Free-text persona for cold-start users |
+| `session_history` | `list[dict]` | `[]` | Prior conversation turns `[{role, content}]` |
+| `domain_filter` | `string` | `null` | Category constraint (e.g. `"electronics"`, `"fashion"`) |
+
+---
+
+## Key Design Decisions
+
+### Hybrid Retrieval with RRF
+
+The retrieval stage fuses three signals using Reciprocal Rank Fusion (k=60):
+
+1. **Dense ANN** — Turbovec cosine-similarity search over user history embeddings (weight: 0.7)
+2. **Collaborative Filtering** — Cosine similarity over cross-domain projected user vectors
+3. **Sparse BM25** — Keyword search over the full review corpus (weight: 0.3)
+
+Items appearing in multiple ranked lists receive a compounded RRF boost.
+
+### Two-Stage Reranking
+
+After retrieval, a two-stage reranker narrows from ~100 candidates to the final top-N:
+
+1. **Cross-encoder** (`ms-marco-MiniLM-L-6-v2`) — Scores each `(query, candidate)` pair locally with no API cost. Applies a persona-conditioned emotional intensity multiplier based on the user's historical rating variance. Prunes to top-30.
+2. **LLM personalisation** — Gemini reads the top-30 candidates and the user profile, returning a ranked list with natural-language reasoning for each recommendation.
+
+### Cold-Start Handling
+
+New users with no Turbovec profile are routed through `cold_start_node`, which:
+- Parses the `persona_description` into explicit/implicit signals via the context extraction node
+- Maps the persona to the nearest user cluster centroid using cosine similarity
+- Uses the centroid as a proxy embedding for the retrieval stage
+
+### Naija Voice Injection
+
+Review generation uses RAG over a `naija_style_examples` Turbovec collection, seeded from real Jumia customer reviews. The LLM is instructed to match the retrieved examples' tone, producing outputs with authentic Nigerian linguistic patterns.
+
+### Caching Strategy
+
+| Layer | Technology | Scope |
+|---|---|---|
+| LLM responses | SQLite (`scratch/cache/llm_cache.db`) | Persistent across restarts |
+| Embeddings | `diskcache` (`scratch/cache/embeddings/`) | Persistent across restarts |
+| BM25 corpus | In-memory, mtime-invalidated | Per process, rebuilt on file change |
+| User profiles | `core.profiles` shared store, mtime-invalidated | Per process |
+| User profile payloads | `lru_cache(maxsize=2048)` on DB read | Per process |
+
+---
+
+## Evaluation
+
+Run the full evaluation harness:
+
+```bash
+# Task A only (user modelling)
+PYTHONPATH=. python scripts/evaluate.py --task a --limit 20
+
+# Task B only (recommendations)
+PYTHONPATH=. python scripts/evaluate.py --task b --limit 20
+
+# Both tasks
+PYTHONPATH=. python scripts/evaluate.py --task both
+```
+
+**Metrics and targets:**
+
+| Metric | Target | Task |
+|---|---|---|
+| ROUGE-L | ≥ 0.35 | Task A (review generation) |
+| BERTScore F1 | ≥ 0.82 | Task A (review generation) |
+| RMSE | ≤ 0.80 | Task A (rating prediction) |
+| NDCG@10 | ≥ 0.15 | Task B (recommendation ranking) |
+
+### Ablation Studies
+
+```bash
+PYTHONPATH=. python scripts/run_ablations.py --limit 5
+```
+
+Runs three ablation conditions:
+- **Baseline** — Full pipeline
+- **No Jumia Context** — Task A without Naija style examples
+- **No BM25** — Task B with dense-only retrieval
+- **No Cross-Encoder** — Task B with LLM reranking only
+
+---
+
+## Development
+
+All developer workflows are available via `make`:
+
+```bash
+make help          # Show all available targets
+
+make up            # Start all services
+make down          # Stop all services
+make build         # Rebuild the API Docker image
+make fresh         # Tear down → rebuild → bring back up
+
+make logs          # Tail API container logs
+make shell         # Open a bash shell inside the API container
+make restart       # Restart only the API container
+
+make index         # Run the full data pipeline
+make reindex       # Force re-download and re-index
+
+make test          # Run pytest test suite
+make lint          # Lint with ruff
+```
+
+### Running locally (without Docker)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Run the API
+uvicorn api.main:app --reload --port 8000
+```
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `GOOGLE_API_KEY` | *(required)* | Google AI Studio or Vertex AI key for Gemini |
+| `LLM_MODEL` | `gemma-4-26b-a4b-it` | Gemini model name |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformer model name |
+| `DATASET_BASE_URL` | *(see `.env.example`)* | Base URL for dataset files (HuggingFace or custom host) |
+| `DATASET_BASE_URL` | *(see `.env.example`)* | Base URL for dataset files (HuggingFace or custom host) |
+
+---
+
+## Turbovec Collections
+
+| Collection | Content | Indexed by |
+|---|---|---|
+| `user_profiles` | One point per user — their history embedding + profile payload | `scripts/ingest.py` |
+| `naija_style_examples` | Individual Jumia review bodies for RAG | `scripts/seed_naija_examples.py` |
+
+---
+
+## Data Pipeline
+
+```
+scripts/scrape_jumia.py          → data/jumia_reviews.json
+scripts/ingest.py                → data/user_profiles.json
+                                   data/items.json
+scripts/build_index.py           → Turbovec: user_profiles collection
+scripts/seed_naija_examples.py   → Turbovec: naija_style_examples collection
+```
+
+The dataset is also available on Hugging Face at `DreamerX/Ego-Jumia-Review` and is downloaded automatically by `make index`.

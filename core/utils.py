@@ -1,14 +1,16 @@
 import hashlib
 import re
+import uuid
+from typing import Any
 
 
-def to_qdrant_id(item_id: str) -> int:
+def to_vector_id(item_id: str) -> int:
     """
-    Convert a string ID to a Qdrant point ID (integer).
-    Uses MD5 hashing to deterministically map any string ID to a valid integer
-    in the range [0, 10^12).
+    Convert a string ID to a Turbovec point ID (integer).
+    Uses a 63-bit hash space (lower 63 bits of MD5) to fit in the 64-bit signed int
+    range required by SQLite while remaining compatible with Turbovec.
     """
-    return int(hashlib.md5(str(item_id).encode()).hexdigest(), 16) % (10**12)
+    return int(hashlib.md5(str(item_id).encode()).hexdigest(), 16) & 0x7FFFFFFFFFFFFFFF
 
 
 def to_stable_id(name: str) -> str:
@@ -45,46 +47,23 @@ def clean_review_text(text: str) -> str:
     if not text:
         return ""
 
-    # If it starts with a markdown header, remove it to see the body
-    if text.startswith("###"):
-        lines = text.split("\n")
-        if len(lines) > 1 and lines[0].startswith("###"):
-            text = "\n".join(lines[1:])
+    cleaned = re.sub(r"(?im)^###.*$", "", text)
+    cleaned = re.sub(r"(?im)^Item:\s*.*$", "", cleaned)
+    cleaned = re.sub(r"(?im)^Rating:\s*.*$", "", cleaned)
 
-    # Split on common delimiters LLMs use for metadata
-    cleaned = text.split("###")[0].strip()
-    cleaned = cleaned.split("\nItem:")[0].strip()
-    cleaned = cleaned.split("\nRating:")[0].strip()
-
-    # Strip quotes and normalize whitespace
-    cleaned = cleaned.strip('"').strip("'")
+    cleaned = cleaned.strip().strip('"').strip("'")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
 
 
-def safe_loads_langchain(payload_str: str) -> any:
+def safe_loads_langchain(payload: str) -> Any:
     """
-    Safely deserialize a LangChain payload, restricting allowed_objects to 'messages'
-    only to prevent unauthorized class instantiation and code execution.
+    Safely load LangChain serialized content, allowing only messages.
+    Calls the underlying loads implementation directly to avoid the @beta
+    decorator warning — this usage is intentional and well-understood.
     """
     from langchain_core.load import loads
+    # Access __wrapped__ to bypass the @beta warning decorator.
+    _loads_impl = getattr(loads, "__wrapped__", loads)
+    return _loads_impl(payload, allowed_objects="messages", secrets_from_env=False)
 
-    return loads(
-        payload_str,
-        allowed_objects="messages",
-        secrets_from_env=False,
-    )
-
-
-def safe_load_langchain(payload_file) -> any:
-    """
-    Safely deserialize a LangChain payload from a file-like object, restricting
-    allowed_objects to 'messages' only.
-    """
-    from langchain_core.load import load
-
-    return load(
-        payload_file,
-        allowed_objects="messages",
-        secrets_from_env=False,
-    )

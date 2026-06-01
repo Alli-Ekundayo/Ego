@@ -2,7 +2,7 @@
 core/hybrid_search.py
 ---------------------
 Hybrid Search: Reciprocal Rank Fusion (RRF) of:
-  1. Dense Semantic Search  — Qdrant cosine-similarity ANN over history vectors
+  1. Dense Semantic Search  — Turbovec cosine-similarity ANN over history vectors
   2. Sparse Keyword Search  — BM25 over the text corpus of user reviews
 
 The final merged score balances both signals so that candidates that appear
@@ -14,21 +14,22 @@ Where k=60 is the standard RRF constant recommended in the literature.
 
 Design choices:
 - The BM25 index is built on-demand from user_profiles.json (train_reviews).
-- Dense results come from VectorStore.search() (already cached in Qdrant).
+- Dense results come from VectorStore.search() (already cached in Turbovec).
 - This module is stateless and callable per-request with minimal overhead.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import re
+import threading
 from pathlib import Path
 from typing import Any
 
+from core.profiles import profiles_list as _load_profiles
+from core.utils import tokenize as _tokenize_util
+
 log = logging.getLogger(__name__)
 
-# Lazy-import rank_bm25 to avoid hard failure if the package isn't installed.
 try:
     from rank_bm25 import BM25Okapi  # type: ignore
 
@@ -40,17 +41,12 @@ except ImportError:
         "Install it with: pip install rank-bm25"
     )
 
-_PROFILES_PATH = Path(__file__).parent.parent / "data" / "user_profiles.json"
-
-# ── RRF constant ──────────────────────────────────────────────────────────────
 RRF_K = 60
 
 
 def _tokenize(text: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", (text or "").lower())
-
-
-# ── BM25 corpus management ────────────────────────────────────────────────────
+    """Thin wrapper around core.utils.tokenize (re-exported for local use)."""
+    return _tokenize_util(text)
 
 
 class ReviewCorpus:
@@ -63,7 +59,7 @@ class ReviewCorpus:
 
     def __init__(self):
         self._bm25: Any = None
-        self._doc_meta: list[dict] = []  # parallel to the BM25 corpus
+        self._doc_meta: list[dict] = []
         self._tokenized_corpus: list[list[str]] = []
 
     def build(self, profiles: list[dict]) -> None:
@@ -123,29 +119,35 @@ class ReviewCorpus:
         return [(self._doc_meta[i], score) for i, score in indexed[:top_k]]
 
 
-# Module-level singleton corpus (lazy-loaded)
 _corpus: ReviewCorpus | None = None
-_corpus_profile_count: int = 0
+_corpus_mtime: float = 0.0
+_corpus_lock = threading.Lock()
 
 
 def _get_corpus() -> ReviewCorpus:
-    global _corpus, _corpus_profile_count
-    try:
-        with open(_PROFILES_PATH, encoding="utf-8") as f:
-            profiles = json.load(f)
-    except Exception as exc:
-        log.error("Could not load user_profiles.json for BM25: %s", exc)
-        profiles = []
+    """Return the BM25 corpus, rebuilding only when the profiles file changes."""
+    global _corpus, _corpus_mtime
 
-    if _corpus is None or len(profiles) != _corpus_profile_count:
+    _profiles_path = Path(__file__).parent.parent / "data" / "user_profiles.json"
+    current_mtime = (
+        _profiles_path.stat().st_mtime if _profiles_path.exists() else 0.0
+    )
+    # Fast path: no lock needed if already built and file hasn't changed
+    if _corpus is not None and current_mtime == _corpus_mtime:
+        return _corpus
+
+    with _corpus_lock:
+        # Re-check under the lock (another thread may have just built it)
+        if _corpus is not None and current_mtime == _corpus_mtime:
+            return _corpus
+
+        profiles = _load_profiles()
+
         _corpus = ReviewCorpus()
         _corpus.build(profiles)
-        _corpus_profile_count = len(profiles)
+        _corpus_mtime = current_mtime
 
     return _corpus
-
-
-# ── RRF Fusion ────────────────────────────────────────────────────────────────
 
 
 def reciprocal_rank_fusion(
@@ -168,7 +170,6 @@ def reciprocal_rank_fusion(
     """
     scores: dict[str, dict] = {}
 
-    # Dense signal
     for rank, item in enumerate(dense_results, start=1):
         pid = str(item.get("item_id", item.get("product_id", "")))
         if not pid:
@@ -180,7 +181,6 @@ def reciprocal_rank_fusion(
         if "dense" not in scores[pid]["retrieval_sources"]:
             scores[pid]["retrieval_sources"].append("dense")
 
-    # Sparse signal
     for rank, (meta, _bm25_score) in enumerate(sparse_results, start=1):
         pid = str(meta.get("product_id", ""))
         if not pid:
@@ -204,9 +204,6 @@ def reciprocal_rank_fusion(
     return merged
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
-
-
 def hybrid_search(
     dense_results: list[dict],
     sparse_keywords: list[str],
@@ -218,7 +215,7 @@ def hybrid_search(
     Run hybrid search: fuse pre-computed dense results with BM25 sparse results.
 
     Args:
-        dense_results:    Already-ranked candidates from Qdrant semantic search.
+        dense_results:    Already-ranked candidates from Turbovec semantic search.
                           Each dict must have 'item_id' (or 'product_id').
         sparse_keywords:  Keyword tokens for BM25 query (from aspect extraction).
         top_k:            Number of final merged candidates to return.

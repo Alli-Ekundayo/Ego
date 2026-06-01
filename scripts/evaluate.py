@@ -15,7 +15,6 @@ import sys
 import traceback
 from pathlib import Path
 
-# Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
@@ -36,8 +35,6 @@ TARGETS = {
     "rmse": 0.80,
     "ndcg": 0.15,
 }
-
-# ── Metrics ────────────────────────────────────────────────────────────────────
 
 
 def calculate_rouge(reference: str, prediction: str) -> float:
@@ -81,32 +78,36 @@ def calculate_ndcg(
     return dcg / idcg if idcg > 0 else 0.0
 
 
-# ── Task A: User Modelling ─────────────────────────────────────────────────────
-
-
 def load_task_a_cases(profiles_path: Path, limit: int | None = None) -> list[dict]:
     with open(profiles_path, encoding="utf-8") as f:
         profiles = json.load(f)
     cases = []
-    for profile in profiles:
-        for review in profile.get("test_reviews", []):
-            cases.append(
-                {
-                    "user_persona": profile["name"],
-                    "item_metadata": {
-                        "name": review.get("product_name", "Unknown"),
-                        "category": review.get("category", "Unknown"),
-                        "description": "",
-                    },
-                    "ground_truth_rating": float(review.get("rating", 3.0)),
-                    "ground_truth_review": (
-                        review.get("title", "") + " " + review.get("body", "")
-                    ).strip(),
-                }
-            )
-            if limit and len(cases) >= limit:
-                return cases
+    max_test_reviews = (
+        max(len(p.get("test_reviews", [])) for p in profiles) if profiles else 0
+    )
+    for idx in range(max_test_reviews):
+        for profile in profiles:
+            test_reviews = profile.get("test_reviews", [])
+            if idx < len(test_reviews):
+                review = test_reviews[idx]
+                cases.append(
+                    {
+                        "user_persona": profile["name"],
+                        "item_metadata": {
+                            "name": review.get("product_name", "Unknown"),
+                            "category": review.get("category", "Unknown"),
+                            "description": "",
+                        },
+                        "ground_truth_rating": float(review.get("rating", 3.0)),
+                        "ground_truth_review": (
+                            review.get("title", "") + " " + review.get("body", "")
+                        ).strip(),
+                    }
+                )
+                if limit and len(cases) >= limit:
+                    return cases
     return cases
+
 
 
 def evaluate_task_a(cases: list[dict]) -> dict:
@@ -145,9 +146,6 @@ def evaluate_task_a(cases: list[dict]) -> dict:
     }
 
 
-# ── Task B: Recommendation ─────────────────────────────────────────────────────
-
-
 def load_task_b_cases(profiles_path: Path, limit: int | None = None) -> list[dict]:
     with open(profiles_path, encoding="utf-8") as f:
         profiles = json.load(f)
@@ -181,7 +179,6 @@ def evaluate_task_b(cases: list[dict]) -> dict:
     for i, case in enumerate(cases):
         log.info("[%d/%d] Task B: user='%s'", i + 1, len(cases), case["user_persona"])
         try:
-            # Provide full initial state to avoid partial state issues
             initial_state = {
                 "user_id": case["user_id"],
                 "context_text": case["context"],
@@ -189,10 +186,14 @@ def evaluate_task_b(cases: list[dict]) -> dict:
                 "session_history": [],
                 "n": 10,
                 "domain_filter": None,
+                "new_product_features": {},
                 "profile": None,
                 "is_cold_start": False,
                 "structured_signals": {},
                 "extracted_domain": None,
+                "extracted_aspects": [],
+                "aspect_queries": [],
+                "sparse_keywords": [],
                 "proxy_embedding": [],
                 "candidates": [],
                 "ranked_recommendations": [],
@@ -201,13 +202,11 @@ def evaluate_task_b(cases: list[dict]) -> dict:
             }
             res = task_b_graph.invoke(initial_state)
 
-            # Robustly handle result format
             if isinstance(res, list):
                 res = res[-1] if res else {}
 
             recs = res.get("ranked_recommendations") or res.get("recommendations") or []
 
-            # If recs is a list of lists, flatten it
             if recs and isinstance(recs[0], list):
                 recs = [item for sublist in recs for item in sublist]
 
@@ -234,9 +233,6 @@ def evaluate_task_b(cases: list[dict]) -> dict:
 
     ndcg = float(np.mean(ndcg_scores)) if ndcg_scores else 0.0
     return {"ndcg": ndcg, "errors": errors}
-
-
-# ── Main ───────────────────────────────────────────────────────────────────────
 
 
 def main():

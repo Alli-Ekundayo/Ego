@@ -37,9 +37,6 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -47,12 +44,8 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 BASE_URL = "https://www.jumia.com.ng"
 
-# Confirmed working category URL slugs (these are real Jumia nav paths)
 DEFAULT_CATEGORIES: dict[str, str] = {
     "phones-tablets": "Phones & Tablets",
     "electronics": "Electronics",
@@ -67,7 +60,6 @@ DEFAULT_CATEGORIES: dict[str, str] = {
     "video-games": "Video Games",
 }
 
-# Rotating user-agents mimicking real Nigerian browser traffic
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -84,9 +76,6 @@ USER_AGENTS = [
 DATA_DIR = Path("data")
 
 
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
 @dataclass
 class Review:
     title: str
@@ -94,6 +83,7 @@ class Review:
     reviewer: str
     date: str
     verified: bool
+    rating: float = 5.0
 
 
 @dataclass
@@ -106,9 +96,6 @@ class Product:
     reviews: list[Review] = field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# HTTP helper
-# ---------------------------------------------------------------------------
 def _get(session: requests.Session, url: str, retries: int = 3) -> BeautifulSoup | None:
     """GET a page with retry + exponential back-off. Returns BeautifulSoup or None."""
     session.headers["User-Agent"] = random.choice(USER_AGENTS)
@@ -133,15 +120,10 @@ def _get(session: requests.Session, url: str, retries: int = 3) -> BeautifulSoup
     return None
 
 
-# ---------------------------------------------------------------------------
-# Listing parser
-# ---------------------------------------------------------------------------
 def has_next_page(soup: BeautifulSoup, current_page: int) -> bool:
     """Return True if a 'Next Page' link or a link to the next page number exists."""
-    # Desktop pattern
     if soup.find("a", {"aria-label": "Next Page"}):
         return True
-    # Mobile/Fallback pattern: look for a link containing ?page=N+1
     next_page_str = f"page={current_page + 1}"
     if soup.find("a", href=lambda h: h and next_page_str in h):
         return True
@@ -163,7 +145,6 @@ def parse_listing(soup: BeautifulSoup, category_label: str) -> list[dict]:
         name = name.get_text(strip=True) if name else ""
         if not name:
             continue
-        # Products with star ratings are more likely to have reviews
         has_stars = card.select_one(".stars") is not None
         products.append(
             {
@@ -212,29 +193,21 @@ def scrape_listing_pages(
             log.info("  No 'Next Page' link — reached last page at page %d.", page_num)
             break
 
-        # Polite pause between listing pages
         time.sleep(random.uniform(0.8, 1.5))
 
     log.info("  Total unique products found across listing pages: %d", len(listings))
     return listings
 
 
-# ---------------------------------------------------------------------------
-# SKU extractor
-# ---------------------------------------------------------------------------
 def extract_sku(html_text: str) -> str | None:
     """
     Pull the product SKU from the window.__STORE__ JSON embedded in the page.
     Confirmed pattern: "sku":"IN717EA7WABPLNAFAMZ"
     """
-    # The __STORE__ JSON has "sku":"<VALUE>" — grab the first occurrence
     match = re.search(r'"sku"\s*:\s*"([A-Z0-9]+)"', html_text)
     return match.group(1) if match else None
 
 
-# ---------------------------------------------------------------------------
-# Review page parser
-# ---------------------------------------------------------------------------
 def parse_reviews(soup: BeautifulSoup) -> list[Review]:
     """
     Parse review blocks from /catalog/productratingsreviews/sku/<SKU>/.
@@ -250,16 +223,13 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
       </article>
     """
     reviews = []
-    # Each review is an <article> with these three classes (pvs=small padding, pvm=medium)
     for article in soup.find_all(
         "article", class_=lambda c: c and ("-pvs" in c or "-pvm" in c) and "_bet" in c
     ):
         try:
-            # Title: h3.-m.-fs16.-pvs (or -pvm)
             h3 = article.find("h3", class_="-m")
             title = h3.get_text(strip=True) if h3 else ""
 
-            # Body: p.-pvs (or -pvm) immediately after the h3
             p = (
                 h3.find_next_sibling("p")
                 if h3
@@ -271,14 +241,6 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
             if len(body) < 3:
                 continue
 
-            # Footer structure (confirmed from HTML inspection):
-            #   <div class="-df -j-bet -i-ctr -gy5">
-            #     <div class="-pvs">
-            #       <span class="-prs">28-04-2026</span>
-            #       <span>by Oluwole</span>
-            #     </div>
-            #     <div class="-df -i-ctr -gn5 -fsh0">...Verified Purchase</div>
-            #   </div>
             footer = article.find(
                 "div", class_=lambda c: c and "-j-bet" in c and "-gy5" in c
             )
@@ -294,21 +256,19 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
                 if info_div:
                     spans = info_div.find_all("span", recursive=False)
                     if len(spans) >= 1:
-                        date = spans[0].get_text(strip=True)  # "28-04-2026"
+                        date = spans[0].get_text(strip=True)
                     if len(spans) >= 2:
-                        by_text = spans[1].get_text(strip=True)  # "by Oluwole"
+                        by_text = spans[1].get_text(strip=True)
                         reviewer = (
                             re.sub(r"^by\s+", "", by_text, flags=re.I).strip()
                             or "Anonymous"
                         )
-                # Verified: green badge div has class -gn5
                 verified = bool(footer.find(class_=lambda c: c and "-gn5" in c))
 
-            # Star rating: div.stars text is "5 out of 5"
             stars_el = article.find("div", class_="stars")
             rating_text = stars_el.get_text(strip=True) if stars_el else "0"
             rating_match = re.search(r"(\d+\.?\d*)", rating_text)
-            float(rating_match.group(1)) if rating_match else 5.0
+            rating = float(rating_match.group(1)) if rating_match else 5.0
 
             reviews.append(
                 Review(
@@ -317,6 +277,7 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
                     reviewer=reviewer,
                     date=date,
                     verified=verified,
+                    rating=rating,
                 )
             )
         except Exception as exc:
@@ -325,9 +286,6 @@ def parse_reviews(soup: BeautifulSoup) -> list[Review]:
     return reviews
 
 
-# ---------------------------------------------------------------------------
-# Product scraper
-# ---------------------------------------------------------------------------
 def paginate_reviews(
     session: requests.Session,
     reviews_base_url: str,
@@ -375,7 +333,6 @@ def scrape_product(
     if not soup:
         return [], ""
 
-    # ---- Description ----
     desc_el = (
         soup.select_one(".markup.-pvl")
         or soup.select_one("#productDescription")
@@ -383,10 +340,9 @@ def scrape_product(
     )
     description = desc_el.get_text(" ", strip=True)[:1000] if desc_el else ""
 
-    # ---- SKU → reviews URL ----
-    sku = extract_sku(soup.get_text())  # search rendered text for speed
+    sku = extract_sku(soup.get_text())
     if not sku:
-        sku = extract_sku(str(soup))  # fallback: full HTML string
+        sku = extract_sku(str(soup))
 
     if not sku:
         log.debug("No SKU found for %s", product_url)
@@ -398,9 +354,6 @@ def scrape_product(
     return reviews, description
 
 
-# ---------------------------------------------------------------------------
-# Main orchestration
-# ---------------------------------------------------------------------------
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Scrape Jumia Nigeria reviews for the Ego NLP/accent pipeline."
@@ -464,9 +417,7 @@ def main() -> None:
         log.info("\n── Category: %s ──  (pages=1–%d)", cat_label, args.pages)
         raw_path = DATA_DIR / "jumia_reviews.json"
 
-        # ---- Paginated listing crawl ----
         listings = scrape_listing_pages(session, cat_slug, cat_label, args.pages)
-        # Put starred products first — they're more likely to have reviews
         listings.sort(key=lambda x: x["has_stars"], reverse=True)
 
         found = 0
@@ -507,7 +458,6 @@ def main() -> None:
             seen_ids.add(pid)
             found += 1
 
-            # Incremental save more frequently
             if found % 3 == 0:
                 with open(raw_path, "w", encoding="utf-8") as f:
                     json.dump(all_products, f, ensure_ascii=False, indent=2)
@@ -518,16 +468,12 @@ def main() -> None:
 
         log.info("Category '%s' done: %d products collected", cat_label, found)
 
-    # ---- Save raw output ----
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     raw_path = DATA_DIR / "jumia_reviews.json"
     with open(raw_path, "w", encoding="utf-8") as f:
         json.dump(all_products, f, ensure_ascii=False, indent=2)
     log.info("\nSaved %d products (raw) → %s", len(all_products), raw_path)
 
-    # ---- Save pipeline-ready items.json ----
-    # Nigerian review text is intentionally stitched into `description` so
-    # the embedding model captures authentic local language patterns.
     pipeline_items = []
     for p in all_products:
         review_bodies = [r["body"] for r in p["reviews"] if r.get("body")]

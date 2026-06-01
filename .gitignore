@@ -221,3 +221,5 @@ __marimo__/
 qdrant_storage/
 scratch/
 data/
+test_output.log
+test_task_a.py

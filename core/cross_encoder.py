@@ -25,12 +25,12 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-# ── Lazy-load cross-encoder ───────────────────────────────────────────────────
 _cross_encoder_model: Any = None
 _CE_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
@@ -39,14 +39,21 @@ def _get_cross_encoder() -> Any:
     global _cross_encoder_model
     if _cross_encoder_model is None:
         try:
-            # Check if model is locally cached to prevent hanging downloads
-            cache_dir = (
-                Path.home()
-                / ".cache"
-                / "huggingface"
-                / "hub"
-                / "models--cross-encoder--ms-marco-MiniLM-L-6-v2"
-            )
+            hf_home = os.environ.get("HF_HOME")
+            if hf_home:
+                cache_dir = (
+                    Path(hf_home)
+                    / "hub"
+                    / "models--cross-encoder--ms-marco-MiniLM-L-6-v2"
+                )
+            else:
+                cache_dir = (
+                    Path.home()
+                    / ".cache"
+                    / "huggingface"
+                    / "hub"
+                    / "models--cross-encoder--ms-marco-MiniLM-L-6-v2"
+                )
             snapshot_dir = cache_dir / "snapshots"
             has_local = False
             if snapshot_dir.exists():
@@ -75,9 +82,6 @@ def _get_cross_encoder() -> Any:
     return _cross_encoder_model
 
 
-# ── Emotional intensity scoring ───────────────────────────────────────────────
-
-
 def compute_emotional_intensity(profile_summary: dict) -> float:
     """
     Derive a persona-conditioned emotional intensity weight [0.8, 1.5].
@@ -96,7 +100,6 @@ def compute_emotional_intensity(profile_summary: dict) -> float:
     rating_mean: float = float(profile_summary.get("rating_mean", 3.0))
     rating_std: float = float(profile_summary.get("rating_std", 1.0))
 
-    # If std is missing, estimate from recent_reviews
     if rating_std == 1.0:
         recent: list[dict] = profile_summary.get("recent_reviews", [])
         ratings = []
@@ -110,9 +113,6 @@ def compute_emotional_intensity(profile_summary: dict) -> float:
             variance = sum((x - mean_r) ** 2 for x in ratings) / len(ratings)
             rating_std = math.sqrt(variance)
 
-    # Map std [0, 2.5] → intensity [0.8, 1.5]
-    # std=0 (all same ratings)  → 0.8 (uniform, low intensity)
-    # std=2.0+ (extreme spread) → 1.5 (high intensity)
     intensity = 0.8 + min(rating_std / 2.0, 1.0) * 0.7
     log.debug(
         "Emotional intensity: mean=%.2f, std=%.2f → weight=%.3f",
@@ -143,15 +143,11 @@ def compute_candidate_emotional_match(
     )
     deviation = abs(candidate_rating - 3.0)  # distance from neutral
 
-    # High intensity users prefer emotionally polarised candidates
     if intensity > 1.2:
         match = 0.9 + (deviation / 2.0) * 0.2  # [0.9, 1.1]
     else:
         match = 1.0  # uniform for neutral users
     return match
-
-
-# ── Cross-encoder scoring ─────────────────────────────────────────────────────
 
 
 def _build_candidate_text(candidate: dict) -> str:
@@ -196,7 +192,6 @@ def cross_encoder_rerank(
     intensity = compute_emotional_intensity(profile_summary)
     rating_mean = float(profile_summary.get("rating_mean", 3.0))
 
-    # Build pairs
     pairs = [(query, _build_candidate_text(c)) for c in candidates]
 
     if ce_model is not None:
@@ -208,12 +203,10 @@ def cross_encoder_rerank(
                 float(c.get("rrf_score", c.get("score", 0.5))) for c in candidates
             ]
     else:
-        # Fallback: use existing retrieval score (already computed by hybrid_search)
         raw_scores = [
             float(c.get("rrf_score", c.get("score", 0.5))) for c in candidates
         ]
 
-    # Normalise cross-encoder scores to [0, 1] with sigmoid
     def sigmoid(x: float) -> float:
         return 1.0 / (1.0 + math.exp(-x))
 

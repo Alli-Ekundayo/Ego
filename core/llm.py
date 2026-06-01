@@ -17,6 +17,59 @@ from sqlalchemy.orm import Session
 
 from core.config import settings
 
+# Monkeypatch langchain_google_genai to fix the gemma model parameter filtering bug.
+# Because langchain_google_genai only filters parameters if "gemini" is in request.model,
+# running a model like "gemma-4-26b-a4b-it" causes retry and timeout parameters
+# to be passed directly to the GenerativeServiceClient, raising a TypeError.
+import langchain_google_genai.chat_models as chat_models
+
+def _wrap_generation_method(original_method):
+    def wrapper(*args, **kwargs):
+        for key in [
+            "max_retries",
+            "wait_exponential_multiplier",
+            "wait_exponential_min",
+            "wait_exponential_max",
+            "timeout",
+        ]:
+            kwargs.pop(key, None)
+        return original_method(*args, **kwargs)
+    return wrapper
+
+def _wrap_generation_method_async(original_method):
+    async def wrapper(*args, **kwargs):
+        for key in [
+            "max_retries",
+            "wait_exponential_multiplier",
+            "wait_exponential_min",
+            "wait_exponential_max",
+            "timeout",
+        ]:
+            kwargs.pop(key, None)
+        return await original_method(*args, **kwargs)
+    return wrapper
+
+_original_chat_with_retry = chat_models._chat_with_retry
+_original_achat_with_retry = chat_models._achat_with_retry
+
+def _patched_chat_with_retry(generation_method, **kwargs):
+    wrapped = _wrap_generation_method(generation_method)
+    return _original_chat_with_retry(wrapped, **kwargs)
+
+def _patched_achat_with_retry(generation_method, **kwargs):
+    wrapped = _wrap_generation_method_async(generation_method)
+    return _original_achat_with_retry(wrapped, **kwargs)
+
+try:
+    chat_models._chat_with_retry = _patched_chat_with_retry
+    chat_models._achat_with_retry = _patched_achat_with_retry
+except AttributeError:
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "Could not patch langchain_google_genai retry functions — "
+        "check langchain-google-genai version. Retry parameter filtering may be inactive."
+    )
+
 
 class SafeSQLiteCache(SQLiteCache):
     """SQLite cache with safe deserialization for cached generations."""
@@ -69,7 +122,6 @@ class SafeSQLiteCache(SQLiteCache):
                 session.merge(item)
 
 
-# Initialize persistent SQLite cache for LangChain
 cache_path = Path(__file__).parent.parent / "scratch" / "cache" / "llm_cache.db"
 cache_path.parent.mkdir(parents=True, exist_ok=True)
 set_llm_cache(SafeSQLiteCache(database_path=str(cache_path)))

@@ -1,21 +1,124 @@
 import asyncio
+import logging
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.schemas import (
+    PaginatedProducts,
+    PaginatedUsers,
+    ProductSummary,
     RecommendRequest,
     RecommendResponse,
     SimulateReviewRequest,
     SimulateReviewResponse,
+    UserSummary,
 )
 from graphs.task_a import user_modeling_agent
 from graphs.task_b import task_b_graph
 
-app = FastAPI(title="Ego User Modelling Agent API")
+log = logging.getLogger(__name__)
 
 
-@app.post("/simulate-review", response_model=SimulateReviewResponse)
-async def simulate_review(request: SimulateReviewRequest):
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """
+    Eagerly initialise all heavy singletons on startup.
+
+    This prevents slow first requests and thread-safety races caused by
+    concurrent on-demand initialisation under asyncio.to_thread.
+    """
+    def _load() -> None:
+        # Embedding model (SentenceTransformer + diskcache)
+        from core.embeddings import embedding_model
+        _ = embedding_model.model
+
+        # Shared profile store — single load warms Task A, Task B, and RetrievalAgent
+        from core.profiles import profiles_list
+        profiles_list()
+
+        # BM25 corpus (reads user_profiles.json + builds BM25 index)
+        from core.hybrid_search import _get_corpus
+        _get_corpus()
+
+        # Cross-encoder (only loads if model is cached locally)
+        from core.cross_encoder import _get_cross_encoder
+        _get_cross_encoder()
+
+        # Warm up RetrievalAgent lazy cached properties
+        from agents.retrieval_agent import retrieval_agent
+        _ = retrieval_agent.user_vectors
+        _ = retrieval_agent.cross_domain_projection
+        _ = retrieval_agent.cluster_centroids
+
+        log.info("Startup: all singletons pre-loaded.")
+
+    await asyncio.to_thread(_load)
+    yield  # application runs here
+
+
+app = FastAPI(title="Ego Gateway")
+api_app = FastAPI(title="Ego User Modelling Agent API", lifespan=_lifespan)
+
+api_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+async def _invoke_graph(
+    invoker: Callable[[dict[str, Any]], dict[str, Any]],
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(invoker, state)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _normalise_recommendations(result: dict[str, Any]) -> list[dict[str, str]]:
+    recommendations = (
+        result.get("ranked_recommendations") or result.get("recommendations") or []
+    )
+
+    if recommendations and isinstance(recommendations[0], list):
+        recommendations = [item for sublist in recommendations for item in sublist]
+
+    normalised: list[dict[str, str]] = []
+    for rec in recommendations:
+        if isinstance(rec, dict):
+            normalised.append(
+                {
+                    "item_id": str(rec.get("item_id", "")),
+                    "name": str(rec.get("name", "Unknown")),
+                    "reason": str(rec.get("reason", rec.get("reasoning", ""))),
+                }
+            )
+    return normalised
+
+
+@api_app.get("/health", tags=["ops"])
+async def health() -> dict[str, str]:
+    """Liveness probe used by Docker healthcheck and load-balancers."""
+    return {"status": "ok"}
+
+
+@app.get("/health", tags=["ops"])
+async def gateway_health() -> dict[str, str]:
+    """Liveness probe on the gateway app itself."""
+    return {"status": "ok"}
+
+
+@api_app.post("/simulate-review", response_model=SimulateReviewResponse)
+async def simulate_review(request: SimulateReviewRequest) -> SimulateReviewResponse:
     """
     Run the user modelling pipeline (Task A) to predict a rating
     and generate a culturally-grounded simulated review.
@@ -25,20 +128,16 @@ async def simulate_review(request: SimulateReviewRequest):
         "item_metadata": request.item.model_dump(),
     }
 
-    try:
-        result = await asyncio.to_thread(user_modeling_agent.invoke, initial_state)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    result = await _invoke_graph(user_modeling_agent.invoke, initial_state)
 
     return SimulateReviewResponse(
         rating=result["predicted_rating"],
         review=result.get("simulated_review", ""),
-        naija_review=result.get("final_review"),
     )
 
 
-@app.post("/recommend", response_model=RecommendResponse)
-async def recommend(request: RecommendRequest):
+@api_app.post("/recommend", response_model=RecommendResponse)
+async def recommend(request: RecommendRequest) -> RecommendResponse:
     """
     Run the retrieval + rerank pipeline (Task B) to return N recommendations.
     """
@@ -51,31 +150,142 @@ async def recommend(request: RecommendRequest):
         "n": request.n,
     }
 
-    try:
-        result = await asyncio.to_thread(task_b_graph.invoke, initial_state)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    result = await _invoke_graph(task_b_graph.invoke, initial_state)
+    return RecommendResponse(recommendations=_normalise_recommendations(result))
 
-    recommendations = (
-        result.get("ranked_recommendations") or result.get("recommendations") or []
+
+# ---------------------------------------------------------------------------
+# Catalogue browsing
+# ---------------------------------------------------------------------------
+
+_ITEMS_PATH = Path(__file__).parent.parent / "data" / "items.json"
+_items_cache: list[dict] | None = None
+
+
+def _load_items() -> list[dict]:
+    global _items_cache
+    if _items_cache is None:
+        try:
+            import json
+
+            with _ITEMS_PATH.open(encoding="utf-8") as f:
+                raw = json.load(f)
+            _items_cache = raw if isinstance(raw, list) else list(raw.values())
+        except Exception as exc:
+            log.error("Failed to load items.json: %s", exc)
+            _items_cache = []
+    return _items_cache
+
+
+@api_app.get("/users", response_model=PaginatedUsers, tags=["catalogue"])
+async def list_users(
+    page: int = 1,
+    page_size: int = 20,
+    search: str = "",
+) -> PaginatedUsers:
+    """
+    Paginated list of unique users with display names and top category.
+    Supports ?search= to filter by name or user_id.
+    """
+    from core.profiles import profiles_by_user_id
+
+    by_uid = await asyncio.to_thread(profiles_by_user_id)
+
+    summaries: list[UserSummary] = []
+    for uid, p in by_uid.items():
+        name = str(p.get("name") or uid)
+        cat_pref: dict = p.get("category_pref") or {}
+        top_cat = max(cat_pref, key=cat_pref.get) if cat_pref else "Unknown"
+        rating_stats: dict = p.get("rating_stats") or {}
+        mean_rating = float(rating_stats.get("mean") or 0.0)
+        summaries.append(
+            UserSummary(
+                user_id=uid,
+                name=name,
+                review_count=int(p.get("review_count") or 0),
+                top_category=top_cat,
+                mean_rating=round(mean_rating, 2),
+            )
+        )
+
+    if search:
+        q = search.lower()
+        summaries = [
+            u for u in summaries if q in u.name.lower() or q in u.user_id.lower()
+        ]
+
+    # Sort by review_count desc so the richest profiles come first
+    summaries.sort(key=lambda u: u.review_count, reverse=True)
+
+    total = len(summaries)
+    start = (page - 1) * page_size
+    return PaginatedUsers(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=summaries[start : start + page_size],
     )
 
-    # Flatten if it's a list of lists (sometimes happens with certain LLM outputs)
-    if recommendations and isinstance(recommendations[0], list):
-        recommendations = [item for sublist in recommendations for item in sublist]
 
-    normalised = []
-    for rec in recommendations:
-        if isinstance(rec, dict):
-            normalised.append(
-                {
-                    "item_id": str(rec.get("item_id", "")),
-                    "name": str(rec.get("name", "Unknown")),
-                    "reason": str(rec.get("reason", rec.get("reasoning", ""))),
-                }
+@api_app.get("/products", response_model=PaginatedProducts, tags=["catalogue"])
+async def list_products(
+    page: int = 1,
+    page_size: int = 20,
+    search: str = "",
+    category: str = "",
+) -> PaginatedProducts:
+    """
+    Paginated list of products from the Jumia catalogue.
+    Supports ?search= (name/description) and ?category= filters.
+    """
+
+    items = await asyncio.to_thread(_load_items)
+
+    summaries: list[ProductSummary] = []
+    for item in items:
+        cat = str(item.get("category") or "")
+        if category and category.lower() not in cat.lower():
+            continue
+        rating_stats: dict = item.get("rating_stats") or {}
+        mean_rating = float(rating_stats.get("mean") or 0.0)
+        summaries.append(
+            ProductSummary(
+                id=str(item.get("id") or ""),
+                name=str(item.get("name") or "Unknown"),
+                category=cat,
+                description=str(item.get("description") or "") or None,
+                mean_rating=round(mean_rating, 2),
+                review_count=int(item.get("review_count") or 0),
             )
+        )
 
-    return RecommendResponse(recommendations=normalised)
+    if search:
+        q = search.lower()
+        summaries = [
+            p
+            for p in summaries
+            if q in p.name.lower() or (p.description and q in p.description.lower())
+        ]
+
+    summaries.sort(key=lambda p: p.review_count, reverse=True)
+
+    total = len(summaries)
+    start = (page - 1) * page_size
+    return PaginatedProducts(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=summaries[start : start + page_size],
+    )
+
+
+# Mount the API sub-app under /api
+app.mount("/api", api_app)
+
+# Serve Vite static files
+dist_path = Path(__file__).parent.parent / "frontend" / "dist"
+if dist_path.exists():
+    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="static")
 
 
 if __name__ == "__main__":

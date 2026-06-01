@@ -19,6 +19,7 @@ Stage 2 — LLM Personalisation Reranking:
 import json
 import logging
 import re
+from functools import cached_property
 from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -48,17 +49,18 @@ def _extract_json(text: Any) -> dict:
     if not isinstance(text, str):
         text = str(text)
 
-    # Strip markdown fences if present
     stripped = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.IGNORECASE)
     stripped = re.sub(r"\s*```$", "", stripped)
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
         pass
-    # Fallback: find the first {...} block anywhere in the text
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
-        return json.loads(match.group())
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
     raise ValueError(f"No valid JSON found in LLM response: {text[:200]!r}")
 
 
@@ -67,14 +69,15 @@ class RerankAgent:
     Two-stage reranker:
       1. Cross-encoder + persona emotional intensity (local, fast).
       2. LLM personalisation pass (cloud, with reasoning).
+
+    The LLM is initialised lazily on first use so that a missing or invalid
+    GOOGLE_API_KEY does not crash FastAPI at startup.
     """
 
-    def __init__(self):
-        self.llm = get_llm(settings.LLM_MODEL).bind(
-            response_format={"type": "json_object"}
-        )
-
-    # ── Stage 1: Cross-encoder pre-ranking ───────────────────────────────────
+    @cached_property
+    def llm(self):
+        """Return a JSON-bound LLM instance, constructed on first access."""
+        return get_llm(settings.LLM_MODEL)
 
     def _cross_encoder_prerank(
         self,
@@ -96,11 +99,9 @@ class RerankAgent:
             )
         except Exception as exc:
             log.warning(
-                "Cross-encoder pre-ranking failed: %s. Using original order.", exc
+                "Cross-encoder pre-ranking failed: %s. Using original order.", exc, exc_info=True
             )
             return candidates[:pre_n]
-
-    # ── Stage 2: LLM personalisation ─────────────────────────────────────────
 
     def rerank(
         self,
@@ -109,19 +110,18 @@ class RerankAgent:
         candidates: list[dict],
         top_n: int = 10,
         aspects: list[str] | None = None,
+        session_history: list[dict] | None = None,
     ) -> list[dict]:
         if not candidates:
             return []
 
-        # Build item map for ID restoration (survives LLM ID hallucination)
         item_map = {str(c.get("item_id")): c for c in candidates}
 
-        # ── Stage 1: Cross-encoder prune to top-50 ───────────────────────────
         pre_ranked = self._cross_encoder_prerank(
             query=context,
             candidates=candidates,
             profile_summary=profile,
-            pre_n=50,
+            pre_n=30,
         )
         log.info(
             "  ↳ Cross-encoder pre-rank: %d → %d candidates (aspects=%s)",
@@ -130,7 +130,6 @@ class RerankAgent:
             aspects or [],
         )
 
-        # ── Stage 2: LLM personalisation ─────────────────────────────────────
         formatted = "\n".join(
             f"ID: {c.get('item_id')} | Name: {c.get('name')} | "
             f"Category: {c.get('category')} | "
@@ -146,13 +145,24 @@ class RerankAgent:
                 f"{', '.join(aspects)}. Prioritise candidates that match these aspects."
             )
 
+        history_hint = ""
+        if session_history:
+            history_lines = [
+                f"{m.get('role', 'user').capitalize()}: {m.get('content', '')}"
+                for m in session_history[-5:]
+                if m.get("content")
+            ]
+            if history_lines:
+                history_hint = "\nRecent conversation:\n" + "\n".join(history_lines)
+
         prompt_text = (
             "You are an expert recommendation engine for Jumia Nigeria.\n"
             "Given the user's profile and current context, rank the top {top_n} items "
             "from the provided list.\n"
             "{aspect_hint}\n\n"
             "User Profile Summary: {profile}\n"
-            "Context: {context}\n\n"
+            "Context: {context}\n"
+            "{history_hint}\n\n"
             "Candidates List (pre-ranked by cross-encoder + emotional intensity):\n"
             "{candidates}\n\n"
             "CRITICAL: Return a JSON object with a 'ranked_items' key. "
@@ -172,6 +182,7 @@ class RerankAgent:
                     "candidates": formatted,
                     "top_n": top_n,
                     "aspect_hint": aspect_hint,
+                    "history_hint": history_hint,
                 }
             )
             output = _extract_json(response.content)
@@ -220,7 +231,12 @@ def _profile_summary(profile, structured_signals: dict | None = None) -> dict:
     }
 
 
-rerank_agent = RerankAgent()
+_rerank_agent: RerankAgent = RerankAgent()
+
+
+def _get_rerank_agent() -> RerankAgent:
+    """Return the module-level RerankAgent singleton."""
+    return _rerank_agent
 
 
 def rerank_candidates(
@@ -239,17 +255,17 @@ def rerank_candidates(
         profile:            UserProfile object.
         candidates:         Candidate item dicts from retrieval.
         context_text:       User's current request string.
-        session_history:    Prior conversation turns (unused, kept for API compat).
+        session_history:    Prior conversation turns — passed to LLM for contextual reranking.
         structured_signals: Signals from context extraction node.
         top_n:              Number of final recommendations.
         aspects:            Extracted product aspects for LLM hint injection.
     """
-    _ = session_history
     summary = _profile_summary(profile, structured_signals)
-    return rerank_agent.rerank(
+    return _get_rerank_agent().rerank(
         profile=summary,
         context=context_text,
         candidates=candidates,
         top_n=top_n,
         aspects=aspects,
+        session_history=session_history,
     )

@@ -2,8 +2,8 @@
 -------------------
 Unit and integration tests for the Ego pipeline.
 
-LLM and Qdrant calls are mocked so the suite runs fast without
-a live Gemini key or Qdrant instance.
+LLM and Turbovec calls are mocked so the suite runs fast without
+a live Gemini key or Turbovec instance.
 """
 
 from unittest.mock import patch
@@ -11,11 +11,6 @@ from unittest.mock import patch
 import pytest
 
 from agents.rerank_agent import _extract_json
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 def _agent_result():
     """Mock return value matching UserAgentState schema."""
@@ -50,11 +45,10 @@ def _recommend_result():
 def api_client():
     """TestClient with all external dependencies patched out."""
     with (
-        patch("qdrant_client.QdrantClient"),
         patch("sentence_transformers.SentenceTransformer"),
         patch("graphs.task_a.user_modeling_agent") as mock_agent,
         patch("graphs.task_b.task_b_graph") as mock_task_b,
-        patch("core.llm.set_llm_cache"),  # Avoid SQLite setup in tests
+        patch("core.llm.set_llm_cache"),
     ):
         mock_agent.invoke.return_value = _agent_result()
         mock_task_b.invoke.return_value = _recommend_result()
@@ -64,11 +58,6 @@ def api_client():
         from api.main import app
 
         yield TestClient(app), mock_agent, mock_task_b
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Unit tests: core/math_utils
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestCosimSimilarity:
@@ -89,17 +78,12 @@ class TestCosimSimilarity:
         assert cosine_similarity([0, 0], [1, 0]) == 0.0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Unit tests: core/utils
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestUtils:
-    def test_to_qdrant_id(self):
-        from core.utils import to_qdrant_id
+    def test_to_vector_id(self):
+        from core.utils import to_vector_id
 
-        assert isinstance(to_qdrant_id("test"), int)
-        assert to_qdrant_id("test") == to_qdrant_id("test")
+        assert isinstance(to_vector_id("test"), int)
+        assert to_vector_id("test") == to_vector_id("test")
 
     def test_to_stable_id(self):
         from core.utils import to_stable_id
@@ -112,11 +96,6 @@ class TestUtils:
 
         assert clean_review_text('### Header\n"Review"') == "Review"
         assert clean_review_text("Review\nItem: Metadata") == "Review"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Unit tests: agents/rerank_agent — _extract_json
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestExtractJson:
@@ -134,16 +113,11 @@ class TestExtractJson:
         assert data == [{"item_id": "p1"}]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Integration tests: API endpoints
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestSimulateReviewEndpoint:
     def test_returns_200_on_valid_request(self, api_client):
-        client, mock_agent, _ = api_client
+        client, _, _ = api_client
         response = client.post(
-            "/simulate-review",
+            "/api/simulate-review",
             json={
                 "user_id": "emmanuel",
                 "item": {"name": "Nokia 3310", "category": "Phones & Tablets"},
@@ -154,7 +128,7 @@ class TestSimulateReviewEndpoint:
     def test_response_contains_required_fields(self, api_client):
         client, _, _ = api_client
         data = client.post(
-            "/simulate-review",
+            "/api/simulate-review",
             json={
                 "user_id": "emmanuel",
                 "item": {"name": "Nokia 3310", "category": "Phones & Tablets"},
@@ -168,7 +142,7 @@ class TestRecommendEndpoint:
     def test_returns_200_on_valid_request(self, api_client):
         client, _, _ = api_client
         response = client.post(
-            "/recommend",
+            "/api/recommend",
             json={
                 "user_id": "U123",
                 "context": "looking for headphones",
@@ -180,7 +154,7 @@ class TestRecommendEndpoint:
     def test_response_has_recommendations_list(self, api_client):
         client, _, _ = api_client
         data = client.post(
-            "/recommend",
+            "/api/recommend",
             json={
                 "user_id": "U123",
                 "context": "looking for headphones",

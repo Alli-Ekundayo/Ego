@@ -1,12 +1,41 @@
-.venv
-__pycache__
-*.pyc
-.git
+# ── Python ─────────────────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── Git ─────────────────────────────────────────────────────────────────────────
+.git/
 .gitignore
-qdrant_storage
+.gitattributes
+
+# ── Secrets ─────────────────────────────────────────────────────────────────────
+.env
+.env.*
+
+# ── Large data files (mounted as volume at runtime) ───────────────────────────
 data/jumia_reviews.json
 data/user_profiles.json
+
+# ── Jupyter / notebooks ────────────────────────────────────────────────────────
+notebooks/
 *.ipynb
-outputs
-logs
-.env
+
+# ── Dev artefacts ─────────────────────────────────────────────────────────────
+scratch/
+outputs/
+logs/
+*.log
+
+# ── Qdrant local storage (mounted as volume) ──────────────────────────────────
+qdrant_storage/
+
+# ── Docs & CI ─────────────────────────────────────────────────────────────────
+*.md
+*.txt
+!requirements.txt
+Makefile
+frontend/node_modules/

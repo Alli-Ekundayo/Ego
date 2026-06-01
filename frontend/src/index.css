@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Geist", "Cabinet Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --color-zinc-950: #09090b;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+  --shadow-card-hover: 0 4px 6px -3px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --selection-bg: #d1fae5;
+    --selection-text: #065f46;
+    --grid-color: rgba(9, 9, 11, 0.05);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --selection-bg: #064e3b;
+    --selection-text: #ecfdf5;
+    --grid-color: rgba(255, 255, 255, 0.04);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-zinc-50 text-zinc-950 antialiased font-sans dark:bg-zinc-950 dark:text-zinc-50;
+    overflow-x: hidden;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+
+  p, li, span, div, a, button, label, textarea, input {
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--selection-bg);
+    color: var(--selection-text);
+  }
+
+  /* Smooth transitions for all interactive elements */
+  * {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply rounded-xl bg-zinc-950 px-6 py-3 font-semibold text-white shadow-[0_2px_4px_rgba(9,9,11,0.12)] transition-all hover:-translate-y-0.5 hover:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 dark:bg-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-100;
+  }
+
+  .btn-secondary {
+    @apply rounded-xl border border-zinc-200 bg-white px-6 py-3 font-semibold text-zinc-700 shadow-sm transition-all hover:bg-zinc-50 hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:ring-offset-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus:ring-emerald-500/40;
+  }
+
+  .btn-text {
+    @apply text-sm font-medium text-zinc-600 hover:text-zinc-950 transition-colors dark:text-zinc-300 dark:hover:text-white;
+  }
+
+  .input-base {
+    @apply rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm transition-all placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:shadow-md disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:ring-emerald-500/30 dark:disabled:bg-zinc-900 dark:disabled:text-zinc-500;
+  }
+
+  .input-label {
+    @apply text-sm font-semibold text-zinc-800 dark:text-zinc-200;
+  }
+
+  .card {
+    @apply rounded-2xl border border-zinc-200/70 bg-white/70 p-5 shadow-card transition-all hover:shadow-card-hover hover:border-zinc-300/70 dark:border-zinc-800/70 dark:bg-zinc-900/70 dark:hover:border-zinc-700/70;
+  }
+
+  .card-header {
+    @apply text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400;
+  }
+
+  .card-title {
+    @apply mt-3 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white;
+  }
+
+  .bg-grid {
+    background-size: 32px 32px;
+    background-image: 
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+    mask-image: radial-gradient(circle at 50% 25%, black 40%, transparent 95%);
+    -webkit-mask-image: radial-gradient(circle at 50% 25%, black 40%, transparent 95%);
+  }
+}

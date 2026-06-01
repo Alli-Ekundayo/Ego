@@ -2,7 +2,7 @@
 data/build_index.py
 -------------------
 Reads data/items.json (produced by data/ingest.py + scripts/scrape_jumia.py)
-and indexes every product into Qdrant for semantic retrieval.
+and indexes every product into Turbovec for semantic retrieval.
 
 The text embedded for each product is:
     "<name> <category> <description> <review1> | <review2> | …"
@@ -15,12 +15,12 @@ Run:
 """
 
 import argparse
-import hashlib
 import json
 import logging
 from pathlib import Path
 
 from core.embeddings import embedding_model
+from core.utils import to_vector_id as _to_vector_id
 from core.vector_store import vector_store
 
 log = logging.getLogger(__name__)
@@ -28,18 +28,10 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-ITEMS_PATH = Path(__file__).parent / "items.json"
-DEFAULT_COLLECTION = "user_profiles"  # changed from 'items' — we now model users
-VECTOR_SIZE = 384  # all-MiniLM-L6-v2 output dimension
+ITEMS_PATH = Path(__file__).parent.parent / "data" / "items.json"
+DEFAULT_COLLECTION = "user_profiles"
+VECTOR_SIZE = 384
 BATCH_SIZE = 8
-
-
-def _to_qdrant_id(item_id: str) -> int:
-    """
-    Qdrant requires integer point IDs.
-    We convert arbitrary string IDs to a stable integer via MD5.
-    """
-    return int(hashlib.md5(item_id.encode()).hexdigest(), 16) % (10**12)
 
 
 def build_text(item: dict) -> str:
@@ -72,7 +64,7 @@ def build_index(collection_name: str = DEFAULT_COLLECTION) -> None:
         return
 
     log.info(
-        "Creating / recreating Qdrant collection '%s' (dim=%d)…",
+        "Creating / recreating Turbovec collection '%s' (dim=%d)…",
         collection_name,
         VECTOR_SIZE,
     )
@@ -87,9 +79,8 @@ def build_index(collection_name: str = DEFAULT_COLLECTION) -> None:
 
         texts = [build_text(item) for item in batch]
         vectors = embedding_model.embed_batch(texts)
-        ids = [_to_qdrant_id(item["id"]) for item in batch]
+        ids = [_to_vector_id(item["id"]) for item in batch]
 
-        # Forward ALL keys except 'description' (too large for payload) as metadata
         payloads = [
             {k: v for k, v in item.items() if k != "description"} for item in batch
         ]
@@ -99,18 +90,18 @@ def build_index(collection_name: str = DEFAULT_COLLECTION) -> None:
         log.info("  Indexed %d / %d", indexed, total)
 
     log.info(
-        "Done — %d items indexed into Qdrant collection '%s'.", indexed, collection_name
+        "Done — %d items indexed into Turbovec collection '%s'.", indexed, collection_name
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Embed and index items.json into Qdrant."
+        description="Embed and index items.json into Turbovec."
     )
     parser.add_argument(
         "--collection",
         default=DEFAULT_COLLECTION,
-        help=f"Qdrant collection name (default: {DEFAULT_COLLECTION})",
+        help=f"Turbovec collection name (default: {DEFAULT_COLLECTION})",
     )
     args = parser.parse_args()
     build_index(collection_name=args.collection)

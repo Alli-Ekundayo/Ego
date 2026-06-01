@@ -1,0 +1,21 @@
+{
+  "name": "ego-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Ego Recommendation System",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve -s frontend/",
+    "build": "echo \"No build step required\"",
+    "test": "echo \"No tests specified\""
+  },
+  "keywords": [
+    "recommendation",
+    "ai",
+    "ecommerce"
+  ],
+  "author": "Ego Team",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}

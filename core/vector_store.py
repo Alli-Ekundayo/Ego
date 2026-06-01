@@ -1,203 +1,339 @@
 """
-Vector Store Wrapper: Qdrant client interface for semantic search and storage.
+Vector Store Wrapper: Turbovec client interface for semantic search and storage.
 
-This module provides a clean abstraction over the Qdrant vector database.
-Qdrant stores and retrieves dense embeddings for:
-1. User profiles with historical review history
-2. Product items with descriptions
-3. Naija-style examples for cultural voice injection
+This module provides a clean abstraction over the Turbovec vector index (using IdMapIndex)
+and stores associated metadata payloads and raw embeddings in a SQLite side-car database.
 
-All graph nodes use this wrapper for consistent Qdrant access patterns.
-This keeps implementation details (e.g., filter syntax, pagination) encapsulated.
+All graph nodes use this wrapper for consistent vector storage and retrieval patterns.
 """
 
+import json
+import logging
+import os
+import sqlite3
 from functools import lru_cache
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
+import numpy as np
+
+import ctypes
+try:
+    ctypes.CDLL("libopenblas.so.0", mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    pass
+
+import turbovec
 
 from core.config import settings
+
+log = logging.getLogger(__name__)
 
 
 class VectorStore:
     """
-    Wrapper around QdrantClient for semantic search and storage operations.
-
-    Provides methods for:
-    - Creating/managing collections
-    - Upserting embeddings with metadata (payloads)
-    - Semantic search by vector similarity
-    - Direct ID-based lookups
+    Wrapper around turbovec.IdMapIndex with SQLite side-car for semantic search
+    and metadata payload storage.
     """
 
     def __init__(self):
-        """Initialize Qdrant client connecting to remote/local server."""
-        self.client = QdrantClient(
-            host=settings.QDRANT_HOST,
-            port=settings.QDRANT_PORT,
-            timeout=60,
-        )
+        """Initialize the storage directory, run one-time schema setup, and seed the index cache."""
+        self.storage_dir = Path(settings.TURBOVEC_STORAGE_DIR)
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        # In-memory index cache
+        self._indices: dict[str, turbovec.IdMapIndex] = {}
+        # One-time DB schema initialisation
+        self._init_db_schema()
+
+    def _init_db_schema(self) -> None:
+        """Run one-time schema initialisation (CREATE TABLE + WAL mode)."""
+        db_path = self.storage_dir / "metadata.db"
+        conn = sqlite3.connect(str(db_path), timeout=30.0)
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA foreign_keys=ON;")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS payloads (
+                    collection TEXT,
+                    id INTEGER,
+                    payload TEXT,
+                    vector TEXT,
+                    PRIMARY KEY (collection, id)
+                )
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _get_db(self) -> sqlite3.Connection:
+        """Open a connection to the SQLite side-car database."""
+        db_path = self.storage_dir / "metadata.db"
+        conn = sqlite3.connect(str(db_path), timeout=30.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+        return conn
+
+    def _get_index(self, collection_name: str, vector_size: int = 384) -> turbovec.IdMapIndex:
+        """Load the index from disk if it exists, otherwise create a new one."""
+        index_path = self.storage_dir / f"{collection_name}.tvim"
+        if index_path.exists():
+            try:
+                return turbovec.IdMapIndex.load(str(index_path))
+            except Exception as e:
+                log.warning(
+                    "Failed to load index '%s' from %s: %s. Recreating.",
+                    collection_name, index_path, e
+                )
+        return turbovec.IdMapIndex(dim=vector_size)
+
+    def _clear_user_profile_cache(self) -> None:
+        self._get_user_profile_payload.cache_clear()
 
     def create_collection(self, collection_name: str, vector_size: int) -> None:
         """
-        Create a Qdrant collection if it does not already exist.
-
-        Collections are immutable in structure: once created, you can't change
-        the vector size or distance metric. This method checks if the collection
-        exists before attempting creation to avoid errors.
-
-        Args:
-            collection_name: Name of the collection (e.g., "user_profiles", "items")
-            vector_size: Dimensionality of vectors (e.g., 384 for MiniLM)
-
-        Distance metric is fixed to COSINE (best for embeddings from neural models).
+        Create a Turbovec index file and initialize database table if it doesn't exist.
         """
-        existing = {c.name for c in self.client.get_collections().collections}
-        if collection_name in existing:
+        index_path = self.storage_dir / f"{collection_name}.tvim"
+        if index_path.exists():
             return
-        self.client.create_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=vector_size,
-                distance=models.Distance.COSINE,
-            ),
-        )
-        self._get_user_profile_payload.cache_clear()
+        
+        index = turbovec.IdMapIndex(dim=vector_size)
+        index.write(str(index_path))
+        
+        # Initialize DB
+        with self._get_db() as conn:
+            pass
 
     def recreate_collection(self, collection_name: str, vector_size: int) -> None:
         """
-        Force-recreate a collection, completely wiping any existing data.
-
-        Use this for development/testing when you need to re-seed data.
-        WARNING: This permanently deletes all data in the collection!
-
-        Args:
-            collection_name: Name of collection to delete and recreate
-            vector_size: Dimensionality of new vectors
+        Force-recreate a collection, completely wiping any existing data on disk and DB.
         """
-        self.client.delete_collection(collection_name=collection_name)
-        self.client.create_collection(
-            collection_name=collection_name,
-            vectors_config=models.VectorParams(
-                size=vector_size,
-                distance=models.Distance.COSINE,
-            ),
-        )
-        self._get_user_profile_payload.cache_clear()
+        index_path = self.storage_dir / f"{collection_name}.tvim"
+        if index_path.exists():
+            try:
+                os.remove(index_path)
+            except OSError:
+                pass
+
+        # Clear from SQLite
+        with self._get_db() as conn:
+            conn.execute("DELETE FROM payloads WHERE collection = ?", (collection_name,))
+            conn.commit()
+
+        self.create_collection(collection_name, vector_size)
+        self._clear_user_profile_cache()
 
     def upsert(
         self,
         collection_name: str,
-        ids: list,
-        vectors: list,
-        payloads: list,
+        ids: list[int],
+        vectors: list[list[float]],
+        payloads: list[dict[str, Any]],
     ) -> None:
         """
         Insert or update points in a collection.
 
-        Each point has:
-        - id: Unique integer identifier
-        - vector: Embedding (dense vector)
-        - payload: Metadata dict (user profile, item info, etc.)
-
-        "Upsert" means: if the ID exists, update it; otherwise, insert new.
-        This is idempotent and safe for batch re-seeding.
-
         Args:
-            collection_name: Collection to insert into
-            ids: List of integer point IDs (unique within collection)
-            vectors: List of embedding vectors (must match collection vector_size)
-            payloads: List of metadata dicts to attach to each point
+            collection_name: Collection name (e.g., "user_profiles")
+            ids: List of unique integer IDs
+            vectors: List of embedding vectors
+            payloads: List of metadata dicts
         """
-        self.client.upsert(
-            collection_name=collection_name,
-            points=models.Batch(
-                ids=ids,
-                vectors=vectors,
-                payloads=payloads,
-            ),
-        )
-        self._get_user_profile_payload.cache_clear()
+        if not ids:
+            return
+
+        # Load existing index or instantiate a new one
+        vector_size = len(vectors[0]) if vectors else 384
+        index = self._get_index(collection_name, vector_size)
+
+        # Deduplicate within the batch (keep the last occurrence)
+        unique_indices = {}
+        for idx, pid in enumerate(ids):
+            unique_indices[pid] = idx
+            
+        dedup_indices = list(unique_indices.values())
+        dedup_ids = [ids[i] for i in dedup_indices]
+        dedup_vectors = [vectors[i] for i in dedup_indices]
+        dedup_payloads = [payloads[i] for i in dedup_indices]
+
+        # Normalize vectors for cosine similarity (dot product of normalized vectors)
+        np_vectors = np.array(dedup_vectors, dtype=np.float32)
+        norms = np.linalg.norm(np_vectors, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        normalized_vectors = np_vectors / norms
+
+        np_ids = np.array(dedup_ids, dtype=np.uint64)
+
+        # Remove existing IDs if they are present
+        for pid in dedup_ids:
+            index.remove(int(pid))
+
+        # Add vectors with IDs
+        index.add_with_ids(normalized_vectors, np_ids)
+
+        # Write index to disk
+        index_path = self.storage_dir / f"{collection_name}.tvim"
+        index.write(str(index_path))
+
+        # Save metadata and original raw vectors in SQLite side-car
+        with self._get_db() as conn:
+            for pid, vec, payload in zip(dedup_ids, dedup_vectors, dedup_payloads):
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO payloads (collection, id, payload, vector)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (collection_name, int(pid), json.dumps(payload), json.dumps(vec)),
+                )
+            conn.commit()
+
+        self._clear_user_profile_cache()
 
     def search(
         self,
         collection_name: str,
         query_vector: list,
         limit: int = 10,
-    ) -> list:
+    ) -> list[Any]:
         """
-        Semantic similarity search: find the nearest neighbors to a query vector.
-
-        Uses cosine similarity to rank all points in the collection by how similar
-        they are to the query. This is the core operation for finding relevant
-        reviews, items, and examples.
-
-        Args:
-            collection_name: Collection to search in
-            query_vector: Query embedding vector (must match collection's vector_size)
-            limit: Max number of results to return (default 10)
-
-        Returns:
-            List of PointStruct objects with:
-            - id: Point identifier
-            - score: Similarity score (1.0 = perfect match, -1.0 = opposite)
-            - payload: Associated metadata dict
-            - vector: The point's embedding (if requested)
+        Semantic similarity search: find nearest neighbors to query vector.
         """
-        return self.client.query_points(
-            collection_name=collection_name,
-            query=query_vector,
-            limit=limit,
-        ).points
+        index_path = self.storage_dir / f"{collection_name}.tvim"
+        if not index_path.exists():
+            return []
+
+        vector_size = len(query_vector)
+        index = self._get_index(collection_name, vector_size)
+        if len(index) == 0:
+            return []
+
+        # Normalize query vector
+        np_query = np.array(query_vector, dtype=np.float32)
+        norm = np.linalg.norm(np_query)
+        if norm > 0:
+            np_query = np_query / norm
+
+        # Reshape for search (1 query vector of shape (1, dim))
+        queries = np.array([np_query], dtype=np.float32)
+        
+        search_k = min(limit, len(index))
+        if search_k <= 0:
+            return []
+
+        scores, ids = index.search(queries, k=search_k)
+
+        # Fetch payloads and raw vectors from SQLite
+        res_ids = [int(pid) for pid in ids[0]]
+        if not res_ids:
+            return []
+
+        with self._get_db() as conn:
+            placeholders = ",".join("?" for _ in res_ids)
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT id, payload, vector FROM payloads WHERE collection = ? AND id IN ({placeholders})",
+                [collection_name] + res_ids,
+            )
+            rows = cursor.fetchall()
+
+        payload_map = {}
+        vector_map = {}
+        for row in rows:
+            pid, payload_str, vector_str = row
+            payload_map[pid] = json.loads(payload_str)
+            vector_map[pid] = json.loads(vector_str) if vector_str else None
+
+        results = []
+        for pid, score in zip(ids[0], scores[0]):
+            pid = int(pid)
+            payload = payload_map.get(pid, {})
+            vector = vector_map.get(pid)
+            results.append(
+                SimpleNamespace(
+                    id=pid,
+                    score=float(score),
+                    payload=payload,
+                    vector=vector
+                )
+            )
+        return results
 
     def retrieve_by_id(
         self,
         collection_name: str,
-        ids: list,
+        ids: list[int],
         with_vectors: bool = True,
-    ) -> list:
+    ) -> list[Any]:
         """
-        Direct lookup: fetch specific points by their integer IDs.
-
-        This is faster than semantic search when you know exactly which
-        points you want (e.g., fetching a specific user profile by stable ID).
-
-        Args:
-            collection_name: Collection to retrieve from
-            ids: List of integer point IDs to fetch
-            with_vectors: Include embedding vectors in results (True for re-ranking)
-
-        Returns:
-            List of PointStruct objects matching the IDs
-            Empty list if IDs don't exist
+        Direct lookup: fetch specific points by their integer IDs from SQLite.
         """
-        return self.client.retrieve(
-            collection_name=collection_name,
-            ids=ids,
-            with_vectors=with_vectors,
-        )
+        if not ids:
+            return []
+
+        with self._get_db() as conn:
+            placeholders = ",".join("?" for _ in ids)
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT id, payload, vector FROM payloads WHERE collection = ? AND id IN ({placeholders})",
+                [collection_name] + [int(pid) for pid in ids],
+            )
+            rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            pid, payload_str, vector_str = row
+            payload = json.loads(payload_str)
+            vector = json.loads(vector_str) if (vector_str and with_vectors) else None
+            results.append(
+                SimpleNamespace(
+                    id=pid,
+                    payload=payload,
+                    vector=vector
+                )
+            )
+        return results
 
     @lru_cache(maxsize=2048)
     def _get_user_profile_payload(
         self, user_id: str, collection_name: str = "user_profiles"
     ) -> dict | None:
-        results, _ = self.client.scroll(
-            collection_name=collection_name,
-            scroll_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="id",
-                        match=models.MatchValue(value=user_id),
-                    )
-                ]
-            ),
-            limit=1,
-            with_payload=True,
-            with_vectors=False,
-        )
-        if not results:
-            return None
-        return dict(results[0].payload or {})
+        """
+        Fetch a single user profile payload by user_id string.
+        Attempts fast ID lookup first, falling back to full scan of collection.
+        """
+        from core.utils import to_vector_id
+        qid = to_vector_id(user_id)
+
+        # Try direct integer ID lookup first
+        with self._get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT payload FROM payloads WHERE collection = ? AND id = ?",
+                (collection_name, qid),
+            )
+            row = cursor.fetchone()
+
+        if row:
+            return json.loads(row[0])
+
+        # Scan fallback
+        with self._get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT payload FROM payloads WHERE collection = ?",
+                (collection_name,),
+            )
+            rows = cursor.fetchall()
+
+        for r in rows:
+            payload = json.loads(r[0])
+            if payload.get("id") == user_id:
+                return payload
+
+        return None
 
 
 vector_store = VectorStore()
@@ -208,21 +344,6 @@ def get_user_profile(
 ) -> dict | None:
     """
     Fetch a single user profile payload by logical user_id.
-
-    This is a convenience function for Task B's cold-start detection.
-    It searches through "user_profiles" collection looking for a point
-    with payload["id"] matching the given user_id.
-
-    Note: This is a "scroll" operation (iterates all points with filter),
-    which is slower than direct ID lookup but necessary because we're
-    searching by a payload field rather than Qdrant point ID.
-
-    Args:
-        user_id: Logical user identifier (e.g., "john_doe_123")
-        collection_name: Collection to search (default "user_profiles")
-
-    Returns:
-        Dict containing user profile (name, reviews, embeddings) or None if not found
     """
     payload = vector_store._get_user_profile_payload(user_id, collection_name)
     return dict(payload) if payload is not None else None

@@ -16,7 +16,7 @@ class UserProfile:
 
 def profile_from_payload(payload: dict) -> UserProfile:
     """
-    Convert a Qdrant payload row into a lightweight UserProfile object.
+    Convert a vector index payload row into a lightweight UserProfile object.
     """
     return UserProfile(
         user_id=str(payload.get("id", "")),
