@@ -1,8 +1,8 @@
 # Build stage
 FROM node:20-slim AS build
 WORKDIR /app
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN rm -f package-lock.json && npm install
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --omit=dev
 COPY frontend/ ./
 RUN npm run build
 

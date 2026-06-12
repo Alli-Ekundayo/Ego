@@ -15,8 +15,7 @@ numpy
 rouge-score
 bert-score
 tenacity
-pytest
-httpx
+
 python-dotenv
 requests
 beautifulsoup4
