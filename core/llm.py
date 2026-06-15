@@ -49,18 +49,18 @@ def _wrap_generation_method_async(original_method):
         return await original_method(*args, **kwargs)
     return wrapper
 
-_original_chat_with_retry = chat_models._chat_with_retry
-_original_achat_with_retry = chat_models._achat_with_retry
-
-def _patched_chat_with_retry(generation_method, **kwargs):
-    wrapped = _wrap_generation_method(generation_method)
-    return _original_chat_with_retry(wrapped, **kwargs)
-
-def _patched_achat_with_retry(generation_method, **kwargs):
-    wrapped = _wrap_generation_method_async(generation_method)
-    return _original_achat_with_retry(wrapped, **kwargs)
-
 try:
+    _original_chat_with_retry = chat_models._chat_with_retry
+    _original_achat_with_retry = chat_models._achat_with_retry
+
+    def _patched_chat_with_retry(generation_method, **kwargs):
+        wrapped = _wrap_generation_method(generation_method)
+        return _original_chat_with_retry(wrapped, **kwargs)
+
+    def _patched_achat_with_retry(generation_method, **kwargs):
+        wrapped = _wrap_generation_method_async(generation_method)
+        return _original_achat_with_retry(wrapped, **kwargs)
+
     chat_models._chat_with_retry = _patched_chat_with_retry
     chat_models._achat_with_retry = _patched_achat_with_retry
 except AttributeError:

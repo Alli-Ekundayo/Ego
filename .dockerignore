@@ -17,8 +17,7 @@ __pycache__/
 .env.*
 
 # ── Large data files (mounted as volume at runtime) ───────────────────────────
-data/jumia_reviews.json
-data/user_profiles.json
+# (Removed ignores so these can be packaged into the cloud image)
 
 # ── Jupyter / notebooks ────────────────────────────────────────────────────────
 notebooks/

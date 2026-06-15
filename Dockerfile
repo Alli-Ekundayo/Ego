@@ -34,6 +34,8 @@ COPY agents/ ./agents/
 COPY core/ ./core/
 COPY lib/ ./lib/
 COPY scripts/ ./scripts/
+COPY data/ ./data/
+COPY graphs/ ./graphs/
 
 RUN mkdir -p scratch/cache data \
     && chown -R ego:ego /app

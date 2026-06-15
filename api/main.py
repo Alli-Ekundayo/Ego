@@ -62,8 +62,8 @@ async def _lifespan(app: FastAPI):
     yield  # application runs here
 
 
-app = FastAPI(title="Ego Gateway")
-api_app = FastAPI(title="Ego User Modelling Agent API", lifespan=_lifespan)
+app = FastAPI(title="Ego Gateway", lifespan=_lifespan)
+api_app = FastAPI(title="Ego User Modelling Agent API")
 
 api_app.add_middleware(
     CORSMiddleware,
