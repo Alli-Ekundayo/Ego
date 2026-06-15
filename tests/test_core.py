@@ -146,7 +146,7 @@ class TestSafeDeserialization:
           "type": "constructor",
           "id": ["langchain_google_genai", "ChatGoogleGenerativeAI"],
           "kwargs": {
-            "model": "gemini-1.5-flash"
+            "model": "gemini-flash-latest"
           }
         }"""
 

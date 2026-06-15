@@ -7,7 +7,8 @@ Pipeline:
     → rating_prediction_node
       → style_analysis_node
         → review_generation_node
-          → END
+          → naija_injection_node
+            → END
 """
 
 import logging
@@ -274,7 +275,7 @@ def style_analysis_node(state: UserAgentState) -> dict:
 
 
 def review_generation_node(state: UserAgentState) -> dict:
-    """Task A - Node 4: Review Generation with Naija Voice Injection"""
+    """Task A - Node 4: Review Generation"""
     item = state.get("item_metadata", {})
     examples = state.get("retrieved_examples", [])
     style_profile = state.get("style_profile", "")
@@ -298,16 +299,6 @@ def review_generation_node(state: UserAgentState) -> dict:
         else "- No historical examples available."
     )
 
-    naija_examples = state.get("naija_examples", [])
-    naija_blocks = []
-    for nx in naija_examples:
-        text = nx.get("text", "").strip()
-        if text:
-            naija_blocks.append(f"- {text}")
-    naija_text = (
-        "\n".join(naija_blocks) if naija_blocks else "- No local examples available."
-    )
-
     extracted_aspects = state.get("extracted_aspects", [])
     aspect_hint = (
         f"Key aspects to address in the review: {', '.join(extracted_aspects)}.\n"
@@ -320,13 +311,10 @@ def review_generation_node(state: UserAgentState) -> dict:
         "Write ONE new review for the unseen target item in the user's voice.\n"
         "Do not copy any example verbatim. Reuse style patterns naturally.\n"
         "The review must match the target rating sentiment and mention the target item context.\n"
-        "Add a subtle and natural 'Naija' (Nigerian) nuance to the writing style (e.g. slight local phrasing or vocabulary) "
-        "as shown in the local examples below, but avoid making it exaggerated or overly thick.\n"
         "{aspect_hint}\n"
         "Return plain text only.\n\n"
         "User style profile:\n{style_profile}\n\n"
         "Historical user reviews:\n{few_shot_text}\n\n"
-        "Authentic Naija voice examples for inspiration:\n{naija_text}\n\n"
         "Target item:\n"
         "- Name: {item_name}\n"
         "- Category: {item_category}\n"
@@ -337,7 +325,7 @@ def review_generation_node(state: UserAgentState) -> dict:
     llm = get_llm(settings.LLM_MODEL, temperature=0.35)
     chain = prompt | llm | StrOutputParser()
 
-    final_review = ""
+    simulated_review = ""
     last_error: Exception | None = None
     for attempt in range(3):
         try:
@@ -345,12 +333,66 @@ def review_generation_node(state: UserAgentState) -> dict:
                 {
                     "style_profile": style_profile,
                     "few_shot_text": few_shot_text,
-                    "naija_text": naija_text,
                     "item_name": item_name,
                     "item_category": item_category,
                     "item_description": item_description,
                     "predicted_rating": predicted_rating,
                     "aspect_hint": aspect_hint,
+                }
+            )
+            simulated_review = clean_review_text(generated)
+            if simulated_review:
+                break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2**attempt)
+
+    if not simulated_review:
+        if last_error:
+            log.warning("Review generation fell back: %s", last_error)
+        simulated_review = clean_review_text(
+            f"I have mixed feelings but it works as expected. For the {item_name}, I'd rate it {predicted_rating}/5."
+        )
+
+    return {"simulated_review": simulated_review}
+
+
+def naija_injection_node(state: UserAgentState) -> dict:
+    """Task A - Node 5: Naija Voice Injection"""
+    simulated_review = state.get("simulated_review", "")
+    naija_examples = state.get("naija_examples", [])
+    
+    naija_blocks = []
+    for nx in naija_examples:
+        text = nx.get("text", "").strip()
+        if text:
+            naija_blocks.append(f"- {text}")
+    naija_text = (
+        "\n".join(naija_blocks) if naija_blocks else "- No local examples available."
+    )
+
+    prompt = ChatPromptTemplate.from_template(
+        "You are rewriting a product review to have a natural 'Naija' (Nigerian) nuance.\n"
+        "Rewrite the following review to include subtle Nigerian phrasing, slang, or vocabulary.\n"
+        "Do not make it exaggerated or overly thick; keep it authentic to a Nigerian e-commerce platform.\n"
+        "Base the tone and style on the authentic Naija voice examples provided below.\n"
+        "Return plain text only.\n\n"
+        "Original review:\n{simulated_review}\n\n"
+        "Authentic Naija voice examples for inspiration:\n{naija_text}\n\n"
+        "Naija review:"
+    )
+    llm = get_llm(settings.LLM_MODEL, temperature=0.4)
+    chain = prompt | llm | StrOutputParser()
+
+    final_review = ""
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            generated = chain.invoke(
+                {
+                    "simulated_review": simulated_review,
+                    "naija_text": naija_text,
                 }
             )
             final_review = clean_review_text(generated)
@@ -362,18 +404,11 @@ def review_generation_node(state: UserAgentState) -> dict:
                 time.sleep(2**attempt)
 
     if not final_review:
-        best = examples[0] if examples else None
-        if best:
-            base = f"{best.get('title', '').strip()} {best.get('body', '').strip()}".strip()
-            final_review = clean_review_text(
-                f"{base} For {item_name}, I'd rate it {predicted_rating}/5."
-            )
-        else:
-            final_review = f"I used this {item_category.lower()} recently. It's okay overall and I would give it {predicted_rating}/5."
+        final_review = simulated_review
         if last_error:
-            log.warning("Review generation fell back: %s", last_error)
+            log.warning("Naija injection fell back: %s", last_error)
 
-    return {"final_review": final_review, "simulated_review": final_review}
+    return {"final_review": final_review}
 
 
 def build_user_modeling_agent():
@@ -382,12 +417,14 @@ def build_user_modeling_agent():
     workflow.add_node("rating_prediction_node", rating_prediction_node)
     workflow.add_node("style_analysis_node", style_analysis_node)
     workflow.add_node("review_generation_node", review_generation_node)
+    workflow.add_node("naija_injection_node", naija_injection_node)
 
     workflow.set_entry_point("profile_retrieval_node")
     workflow.add_edge("profile_retrieval_node", "rating_prediction_node")
     workflow.add_edge("rating_prediction_node", "style_analysis_node")
     workflow.add_edge("style_analysis_node", "review_generation_node")
-    workflow.add_edge("review_generation_node", END)
+    workflow.add_edge("review_generation_node", "naija_injection_node")
+    workflow.add_edge("naija_injection_node", END)
 
     return workflow.compile()
 
@@ -407,4 +444,5 @@ if __name__ == "__main__":
     print("Running User Modeling Agent...")
     result = user_modeling_agent.invoke(test_state)
     print(f"Predicted Rating: {result['predicted_rating']}")
-    print(f"Final Review: {result['final_review']}")
+    print(f"Simulated Review: {result['simulated_review']}")
+    print(f"Final (Naija) Review: {result['final_review']}")

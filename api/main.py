@@ -132,7 +132,7 @@ async def simulate_review(request: SimulateReviewRequest) -> SimulateReviewRespo
 
     return SimulateReviewResponse(
         rating=result["predicted_rating"],
-        review=result.get("simulated_review", ""),
+        review=result.get("final_review", result.get("simulated_review", "")),
     )
 
 
