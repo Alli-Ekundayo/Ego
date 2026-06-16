@@ -171,42 +171,74 @@ function buildPersonaSummary(user) {
   return `${category} explorer`;
 }
 
-function UserDashboard({ title, users, loading, selectedUserId, onChange, selectedUser, color = "emerald" }) {
+function UserDashboard({ title, users, loading, selectedUserId, onChange, selectedUser, color = "emerald", onGuestChange, guestUser }) {
+  const [isGuest, setIsGuest] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestPersona, setGuestPersona] = useState("");
+
   const colorMap = {
     emerald: {
       badgeBorder: "border-emerald-200/70 dark:border-emerald-900/50",
       badgeBg: "bg-emerald-50/80 dark:bg-emerald-950/40",
       badgeText: "text-emerald-700 dark:text-emerald-400",
       statText: "text-emerald-600 dark:text-emerald-450",
+      toggleActive: "bg-emerald-600 dark:bg-emerald-500",
     },
     orange: {
       badgeBorder: "border-orange-200/70 dark:border-orange-900/50",
       badgeBg: "bg-orange-50/80 dark:bg-orange-950/40",
       badgeText: "text-orange-700 dark:text-orange-400",
       statText: "text-orange-600 dark:text-orange-450",
+      toggleActive: "bg-orange-600 dark:bg-orange-500",
     }
   };
   const themeStyles = colorMap[color] || colorMap.emerald;
+
+  const handleGuestToggle = (enabled) => {
+    setIsGuest(enabled);
+    if (!enabled) {
+      onGuestChange?.(null);
+    } else {
+      // If already have a name, push it immediately
+      if (guestName.trim()) {
+        const slug = guestName.trim().toLowerCase().replace(/\s+/g, "_");
+        onGuestChange?.({ user_id: `guest_${slug}`, name: guestName.trim(), persona: guestPersona.trim() });
+      }
+    }
+  };
+
+  const handleGuestInput = (name, persona) => {
+    setGuestName(name);
+    setGuestPersona(persona);
+    if (name.trim()) {
+      const slug = name.trim().toLowerCase().replace(/\s+/g, "_");
+      onGuestChange?.({ user_id: `guest_${slug}`, name: name.trim(), persona: persona.trim() });
+    } else {
+      onGuestChange?.(null);
+    }
+  };
+
+  const activeUser = isGuest ? guestUser : selectedUser;
   const stats = [
     {
       label: "Past reviews",
-      value: selectedUser ? selectedUser.review_count : "—",
-      note: "Count of historical reviews",
+      value: isGuest ? "0" : (selectedUser ? selectedUser.review_count : "—"),
+      note: isGuest ? "New user — no history yet" : "Count of historical reviews",
     },
     {
       label: "Average rating",
-      value: selectedUser ? selectedUser.mean_rating.toFixed(2) : "—",
-      note: "Mean rating from the profile",
+      value: isGuest ? "—" : (selectedUser ? selectedUser.mean_rating.toFixed(2) : "—"),
+      note: isGuest ? "Cold-start mode active" : "Mean rating from the profile",
     },
     {
       label: "Top category",
-      value: selectedUser ? formatCategory(selectedUser.top_category) : "—",
-      note: "Most frequent category",
+      value: isGuest ? "—" : (selectedUser ? formatCategory(selectedUser.top_category) : "—"),
+      note: isGuest ? "Inferred from persona on submit" : "Most frequent category",
     },
     {
       label: "Persona summary",
-      value: selectedUser ? buildPersonaSummary(selectedUser) : "—",
-      note: "Derived from stats, not the raw category",
+      value: isGuest ? (guestUser ? "New user" : "—") : (selectedUser ? buildPersonaSummary(selectedUser) : "—"),
+      note: isGuest ? "Powered by cold-start retrieval" : "Derived from stats, not the raw category",
     },
   ];
 
@@ -215,40 +247,84 @@ function UserDashboard({ title, users, loading, selectedUserId, onChange, select
       <div className="rounded-[2.5rem] border border-zinc-200/70 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_50px_-36px_rgba(0,0,0,0.7)] backdrop-blur">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <div className={`inline-flex items-center gap-2 rounded-full border ${themeStyles.badgeBorder} ${themeStyles.badgeBg} px-3 py-1 text-[10px] uppercase tracking-[0.22em] ${themeStyles.badgeText}`}>
-              <PulseDot color={color} />
-              User dashboard
+            <div className="flex items-center gap-3">
+              <div className={`inline-flex items-center gap-2 rounded-full border ${themeStyles.badgeBorder} ${themeStyles.badgeBg} px-3 py-1 text-[10px] uppercase tracking-[0.22em] ${themeStyles.badgeText}`}>
+                <PulseDot color={color} />
+                User dashboard
+              </div>
+              {/* New user toggle */}
+              <button
+                type="button"
+                onClick={() => handleGuestToggle(!isGuest)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.18em] font-medium transition-all ${
+                  isGuest
+                    ? "border-zinc-950/20 dark:border-zinc-50/20 bg-zinc-950 dark:bg-zinc-50 text-white dark:text-zinc-950"
+                    : "border-zinc-200/70 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full transition-colors ${isGuest ? "bg-white/80 dark:bg-zinc-950/80" : "bg-zinc-400 dark:bg-zinc-500"}`} />
+                {isGuest ? "New user" : "New user?"}
+              </button>
             </div>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">{title}</h2>
             <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Profiles are loaded from <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-mono text-[0.85em] text-zinc-800 dark:text-zinc-200">/api/users</code>.
-              The selected user feeds the endpoint payload below.
+              {isGuest
+                ? "Enter a name and a short persona description. The system will use cold-start retrieval to generate personalised results."
+                : <>Profiles are loaded from <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 font-mono text-[0.85em] text-zinc-800 dark:text-zinc-200">/api/users</code>. The selected user feeds the endpoint payload below.</>}
             </p>
           </div>
 
           <div className="w-full max-w-md">
-            <label className="flex flex-col gap-2">
-              <span className="input-label">User profile</span>
-              <select
-                value={selectedUserId}
-                onChange={(e) => onChange(e.target.value)}
-                className="input-base w-full"
-                aria-label="Select a user profile"
-              >
-                <option value="" disabled>
-                  {loading ? "Loading users..." : "Select a user"}
-                </option>
-                {users.map((user) => (
-                  <option key={user.user_id} value={user.user_id}>
-                    {user.name}
+            {isGuest ? (
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="input-label">Your name</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. Amara Okonkwo"
+                    value={guestName}
+                    onChange={(e) => handleGuestInput(e.target.value, guestPersona)}
+                    className="input-base w-full"
+                    aria-label="New user name"
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="input-label">Persona description</span>
+                  <textarea
+                    placeholder="e.g. budget-conscious student who loves tech deals and fashion"
+                    value={guestPersona}
+                    onChange={(e) => handleGuestInput(guestName, e.target.value)}
+                    rows={3}
+                    className="input-base w-full resize-none"
+                    aria-label="Guest persona description"
+                  />
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-450">Describe your shopping style to guide cold-start recommendations.</span>
+                </label>
+              </div>
+            ) : (
+              <label className="flex flex-col gap-2">
+                <span className="input-label">User profile</span>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => onChange(e.target.value)}
+                  className="input-base w-full"
+                  aria-label="Select a user profile"
+                >
+                  <option value="" disabled>
+                    {loading ? "Loading users..." : "Select a user"}
                   </option>
-                ))}
-              </select>
-              <span className="text-xs text-zinc-500 dark:text-zinc-450">
-                Selected: <span className="font-medium text-zinc-900 dark:text-white">{selectedUser?.name || "—"}</span>
-              </span>
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-450">Switching profiles updates both Task A and Task B requests.</span>
-            </label>
+                  {users.map((user) => (
+                    <option key={user.user_id} value={user.user_id}>
+                      {user.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-xs text-zinc-500 dark:text-zinc-450">
+                  Selected: <span className="font-medium text-zinc-900 dark:text-white">{selectedUser?.name || "—"}</span>
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-450">Switching profiles updates both Task A and Task B requests.</span>
+              </label>
+            )}
           </div>
         </div>
 
@@ -763,9 +839,13 @@ function HomePage() {
 function TaskAPage() {
   const { users, loading } = useUsers();
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [guestUser, setGuestUser] = useState(null);
   const [reviewState, setReviewState] = useState({ status: "idle", data: null, error: null });
-  const effectiveSelectedUserId = selectedUserId || users[0]?.user_id || "";
-  const selectedUser = users.find((user) => user.user_id === effectiveSelectedUserId) || null;
+  const effectiveSelectedUserId = guestUser ? guestUser.user_id : (selectedUserId || users[0]?.user_id || "");
+  const selectedUser = guestUser ? null : (users.find((user) => user.user_id === effectiveSelectedUserId) || null);
+  const effectiveSelectedUser = guestUser
+    ? { name: guestUser.name, review_count: 0, mean_rating: 0, top_category: "unknown", isGuest: true, persona: guestUser.persona }
+    : selectedUser;
 
   return (
     <Shell
@@ -818,9 +898,11 @@ function TaskAPage() {
         users={users}
         loading={loading}
         selectedUserId={effectiveSelectedUserId}
-        onChange={setSelectedUserId}
+        onChange={(id) => { setGuestUser(null); setSelectedUserId(id); }}
         selectedUser={selectedUser}
         color="emerald"
+        onGuestChange={setGuestUser}
+        guestUser={guestUser}
       />
 
       <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
@@ -834,7 +916,7 @@ function TaskAPage() {
               This section posts to <code className="rounded bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 text-[0.85em] text-zinc-800 dark:text-zinc-200">/api/simulate-review</code> and
               uses the selected user from the dashboard above.
             </p>
-            <ReviewForm setReviewState={setReviewState} selectedUserId={effectiveSelectedUserId} selectedUser={selectedUser} />
+            <ReviewForm setReviewState={setReviewState} selectedUserId={effectiveSelectedUserId} selectedUser={effectiveSelectedUser} guestUser={guestUser} />
           </article>
 
           <ResultsGrid activeTab="review" reviewState={reviewState} />
@@ -847,9 +929,13 @@ function TaskAPage() {
 function TaskBPage() {
   const { users, loading } = useUsers();
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [guestUser, setGuestUser] = useState(null);
   const [recommendState, setRecommendState] = useState({ status: "idle", data: null, error: null });
-  const effectiveSelectedUserId = selectedUserId || users[0]?.user_id || "";
-  const selectedUser = users.find((user) => user.user_id === effectiveSelectedUserId) || null;
+  const effectiveSelectedUserId = guestUser ? guestUser.user_id : (selectedUserId || users[0]?.user_id || "");
+  const selectedUser = guestUser ? null : (users.find((user) => user.user_id === effectiveSelectedUserId) || null);
+  const effectiveSelectedUser = guestUser
+    ? { name: guestUser.name, review_count: 0, mean_rating: 0, top_category: "unknown", isGuest: true, persona: guestUser.persona }
+    : selectedUser;
 
   return (
     <Shell
@@ -902,9 +988,11 @@ function TaskBPage() {
         users={users}
         loading={loading}
         selectedUserId={effectiveSelectedUserId}
-        onChange={setSelectedUserId}
+        onChange={(id) => { setGuestUser(null); setSelectedUserId(id); }}
         selectedUser={selectedUser}
         color="orange"
+        onGuestChange={setGuestUser}
+        guestUser={guestUser}
       />
 
       <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
@@ -921,7 +1009,9 @@ function TaskBPage() {
             <RecommendForm
               setRecommendState={setRecommendState}
               selectedUserId={effectiveSelectedUserId}
-              selectedUser={selectedUser}
+              selectedUser={effectiveSelectedUser}
+              guestUser={guestUser}
+              recommendState={recommendState}
             />
           </article>
 

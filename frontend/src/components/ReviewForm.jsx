@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PaperPlaneRight, DownloadSimple } from "@phosphor-icons/react";
 import MagneticButton from "./MagneticButton";
 
-export default function ReviewForm({ setReviewState, selectedUserId, selectedUser }) {
+export default function ReviewForm({ setReviewState, selectedUserId, selectedUser, guestUser }) {
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const [formError, setFormError] = useState("");
   const [formData, setFormData] = useState({
@@ -13,11 +13,13 @@ export default function ReviewForm({ setReviewState, selectedUserId, selectedUse
 
   const handleChange = (e) => setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
+  const isReady = !!(selectedUserId || guestUser);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedUserId) {
-      setReviewState({ status: "error", data: null, error: "Select a user before running Task A." });
-      setFormError("Select a user before running Task A.");
+    if (!isReady) {
+      setReviewState({ status: "error", data: null, error: "Select a user or enter a new user before running Task A." });
+      setFormError("Select a user or enter a new user before running Task A.");
       return;
     }
 
@@ -62,12 +64,16 @@ export default function ReviewForm({ setReviewState, selectedUserId, selectedUse
       <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-950/70 p-4">
         <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Selected user</p>
         <p className="mt-2 text-sm font-medium text-zinc-950 dark:text-white">
-          {selectedUser ? selectedUser.name : "Select a user above"}
+          {selectedUser ? selectedUser.name : guestUser ? guestUser.name : "Select a user above"}
         </p>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {selectedUser ? `${selectedUser.review_count} past reviews` : "Task A uses the selected profile automatically."}
+          {guestUser
+            ? "New user — cold-start mode. Persona: " + (guestUser.persona || "not set")
+            : selectedUser
+              ? `${selectedUser.review_count} past reviews`
+              : "Task A uses the selected profile automatically."}
         </p>
-        {formError && !selectedUserId && (
+        {formError && !isReady && (
           <p className="mt-2 text-xs font-medium text-rose-600 dark:text-rose-455">{formError}</p>
         )}
       </div>
@@ -116,7 +122,7 @@ export default function ReviewForm({ setReviewState, selectedUserId, selectedUse
       <div className="mt-2 flex items-center gap-4">
         <MagneticButton
           type="submit"
-          disabled={loadingSubmit || !selectedUserId}
+          disabled={loadingSubmit || !isReady}
           className="flex-1 rounded-xl bg-zinc-950 dark:bg-zinc-50 px-6 py-4 font-semibold text-white dark:text-zinc-950 shadow-[0_10px_20px_-14px_rgba(9,9,11,0.55)] dark:shadow-[0_10px_20px_-14px_rgba(255,255,255,0.15)] transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="inline-flex items-center justify-center gap-2">

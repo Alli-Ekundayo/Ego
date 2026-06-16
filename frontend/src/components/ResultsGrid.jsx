@@ -83,7 +83,7 @@ export default function ResultsGrid({ activeTab, recommendState = { status: "idl
                       className="p-5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200/70 dark:border-zinc-800/80 rounded-2xl flex flex-col gap-3"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="w-8 h-8 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-mono text-xs">
+                        <span className="w-8 h-8 rounded-full border border-orange-200/70 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 flex items-center justify-center font-mono text-xs">
                           {String(i + 1).padStart(2, "0")}
                         </span>
                         <span className="px-3 py-1 rounded-full bg-white dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400 text-[10px] font-semibold uppercase tracking-wider border border-zinc-200/70 dark:border-zinc-800">
