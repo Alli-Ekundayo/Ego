@@ -9,7 +9,12 @@ export function useUsers() {
       try {
         const pageSize = 100;
         const res = await fetch(`/api/users?page=1&page_size=${pageSize}`);
-        if (!res.ok) throw new Error("Failed to load users");
+        if (!res.ok) {
+          const text = await res.text();
+          let detail = text;
+          try { detail = JSON.parse(text)?.detail ?? text; } catch (_) {}
+          throw new Error(detail || "Failed to load users");
+        }
         const data = await res.json();
         let allUsers = data.items;
         const total = data.total;
@@ -18,7 +23,17 @@ export function useUsers() {
           const numPages = Math.ceil(total / pageSize);
           const promises = [];
           for (let i = 2; i <= numPages; i++) {
-            promises.push(fetch(`/api/users?page=${i}&page_size=${pageSize}`).then(r => r.json()));
+            promises.push(
+              fetch(`/api/users?page=${i}&page_size=${pageSize}`).then(async (r) => {
+                if (!r.ok) {
+                  const text = await r.text();
+                  let detail = text;
+                  try { detail = JSON.parse(text)?.detail ?? text; } catch (_) {}
+                  throw new Error(detail || `Failed to load users page ${i}`);
+                }
+                return r.json();
+              })
+            );
           }
           const pages = await Promise.all(promises);
           pages.forEach(page => {

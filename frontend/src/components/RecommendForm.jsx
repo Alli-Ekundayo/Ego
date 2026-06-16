@@ -84,6 +84,12 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        let detail = text;
+        try { detail = JSON.parse(text)?.detail ?? text; } catch (_) {}
+        throw new Error(detail || `Request failed (${res.status})`);
+      }
       const data = await res.json();
       setRecommendState({ status: "success", data: data.recommendations || [], error: null });
     } catch (err) {

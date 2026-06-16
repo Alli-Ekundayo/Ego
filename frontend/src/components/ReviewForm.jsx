@@ -42,6 +42,12 @@ export default function ReviewForm({ setReviewState, selectedUserId, selectedUse
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) {
+        const text = await res.text();
+        let detail = text;
+        try { detail = JSON.parse(text)?.detail ?? text; } catch (_) {}
+        throw new Error(detail || `Request failed (${res.status})`);
+      }
       const data = await res.json();
       setReviewState({ status: "success", data, error: null });
     } catch (err) {

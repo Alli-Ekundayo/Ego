@@ -323,43 +323,172 @@ def reranking_node(state: TaskBState) -> dict:
     return {"ranked_recommendations": ranked}
 
 
+def _parse_refinement_intent(turn: str) -> dict:
+    """
+    Parse a user refinement turn into actionable signals.
+
+    Returns a dict with:
+        - refined_keywords: extra sparse keywords derived from the refinement
+        - budget_mode:      True if the user wants cheaper / budget items
+        - premium_mode:     True if the user wants more premium / expensive items
+        - quality_tier:     "low" | "mid" | "high" | None (mapped from intent)
+        - context_suffix:   extra phrase to append to the context embedding query
+    """
+    lower = turn.lower()
+
+    BUDGET_TERMS = {"cheap", "cheaper", "budget", "affordable", "low-cost", "value", "inexpensive", "economical"}
+    PREMIUM_TERMS = {"premium", "expensive", "luxury", "high-end", "top-tier", "best", "flagship"}
+
+    budget_mode = any(t in lower for t in BUDGET_TERMS)
+    premium_mode = any(t in lower for t in PREMIUM_TERMS)
+
+    refined_keywords: list[str] = []
+    if budget_mode:
+        refined_keywords.extend(["budget", "affordable", "value", "cheap"])
+    if premium_mode:
+        refined_keywords.extend(["premium", "flagship", "top", "quality"])
+
+    # Derive extra context keywords from the raw turn
+    from core.utils import tokenize
+    raw_tokens = tokenize(turn)
+    stop_words = {"show", "me", "actually", "instead", "please", "more", "less", "options", "i", "want", "need", "give"}
+    context_tokens = [t for t in raw_tokens if t not in stop_words and len(t) > 3]
+    refined_keywords.extend(context_tokens[:6])
+
+    quality_tier = None
+    if budget_mode:
+        quality_tier = "low"
+    elif premium_mode:
+        quality_tier = "high"
+
+    context_suffix = turn.strip()
+
+    return {
+        "refined_keywords": list(dict.fromkeys(refined_keywords)),  # deduplicated
+        "budget_mode": budget_mode,
+        "premium_mode": premium_mode,
+        "quality_tier": quality_tier,
+        "context_suffix": context_suffix,
+    }
+
+
 def multiturn_node(state: TaskBState) -> dict:
     """
-    Conversational refinement:
-    if latest turn signals a refinement ("actually", "instead", "more ..."),
-    re-retrieve and rerank with updated context.
+    Conversational refinement node.
+
+    Triggered when the session history contains at least one user turn after
+    the initial context. Re-retrieves and reranks with:
+      - A blended query vector that shifts toward the refined intent
+        (0.4 * original history vector + 0.6 * refined context embedding)
+      - Injected sparse keywords derived from the refinement turn
+      - A rating-tier filter as a proxy for budget/premium intent
+        (no price field in items.json, so rating_stats.mean is used)
     """
     history = state.get("session_history", [])
     if not history:
         return {"refined_context_text": state.get("context_text", "")}
 
+    # Find the latest user turn in history
     latest_user_turn = ""
     for message in reversed(history):
         if str(message.get("role", "")).lower() == "user":
             latest_user_turn = str(message.get("content", "")).strip()
             break
 
-    refinement_markers = ("actually", "instead", "more ", "less ", "prefer ", "focus ")
-    if not latest_user_turn.lower().startswith(refinement_markers):
+    if not latest_user_turn:
         return {"refined_context_text": state.get("context_text", "")}
 
-    refined_context = (
-        f"{state.get('context_text', '')}\nUser refinement: {latest_user_turn}".strip()
+    # Skip the initial context turn if it's identical to context_text
+    # (it means the user hasn't actually sent a follow-up yet)
+    original_context = state.get("context_text", "").strip()
+    if latest_user_turn == original_context:
+        return {"refined_context_text": original_context}
+
+    log.info("  ↳ Multiturn refinement detected: %r", latest_user_turn[:80])
+
+    # Parse the refinement intent
+    intent = _parse_refinement_intent(latest_user_turn)
+
+    # Build refined context string
+    refined_context = f"{original_context}\nUser refinement: {latest_user_turn}".strip()
+
+    # ------------------------------------------------------------------
+    # Build a blended query vector: shift retrieval toward the new intent.
+    # Original history_vector captures user taste; refined_embed captures
+    # the new request. Blending both avoids a full pivot away from the user.
+    # ------------------------------------------------------------------
+    profile = state["profile"]
+    original_vector = list(getattr(profile, "history_vector", []) or [])
+
+    try:
+        refined_embed = embedding_model.embed_text(refined_context)
+        if original_vector and len(original_vector) == len(refined_embed):
+            import numpy as np
+            blended = (
+                0.35 * np.array(original_vector, dtype=np.float32)
+                + 0.65 * np.array(refined_embed, dtype=np.float32)
+            )
+            # Normalise
+            norm = np.linalg.norm(blended)
+            if norm > 0:
+                blended = blended / norm
+            blended_vector = blended.tolist()
+        else:
+            blended_vector = refined_embed
+    except Exception as exc:
+        log.warning("Multiturn embedding blend failed: %s", exc)
+        blended_vector = original_vector
+
+    # ------------------------------------------------------------------
+    # Build a proxy profile that carries the blended vector so that
+    # retrieve_candidates uses it as the ANN query instead of the original.
+    # ------------------------------------------------------------------
+    from core.user_profile import UserProfile
+    blended_profile = UserProfile(
+        user_id=getattr(profile, "user_id", ""),
+        history_vector=blended_vector,
+        rating_stats=dict(getattr(profile, "rating_stats", {}) or {}),
+        category_pref=dict(getattr(profile, "category_pref", {}) or {}),
+        sample_reviews=list(getattr(profile, "sample_reviews", []) or []),
     )
+
+    # Merge original sparse keywords with refinement-derived ones
+    original_keywords = list(state.get("sparse_keywords") or [])
+    refined_keywords = intent["refined_keywords"]
+    merged_keywords = list(dict.fromkeys(refined_keywords + original_keywords))  # refinement first
+
     refined_candidates = retrieve_candidates(
-        profile=state["profile"],
+        profile=blended_profile,
         context_text=refined_context,
         domain_filter=state.get("extracted_domain"),
         structured_signals=state.get("structured_signals", {}),
-        sparse_keywords=state.get("sparse_keywords") or None,
+        sparse_keywords=merged_keywords or None,
     )[:100]
 
     if not refined_candidates:
         log.info("  ↳ Multiturn re-retrieval returned 0 results; keeping original ranking.")
         return {"refined_context_text": refined_context}
 
+    # ------------------------------------------------------------------
+    # Apply rating-tier proxy filter for budget/premium intent.
+    # items.json has no price field, so rating_stats.mean is used as a
+    # weak proxy: budget shoppers often prefer widely-reviewed mid-range
+    # items; premium shoppers gravitate toward highly-rated ones.
+    # ------------------------------------------------------------------
+    if intent["budget_mode"]:
+        # Keep items with mid-range rating (3.0-4.3) — "reliable but not overpriced"
+        filtered = [c for c in refined_candidates if 3.0 <= float((c.get("rating_stats") or {}).get("mean", 3.5)) <= 4.3]
+        if len(filtered) >= 3:
+            refined_candidates = filtered
+            log.info("  ↳ Budget filter applied: %d candidates retained", len(refined_candidates))
+    elif intent["premium_mode"]:
+        filtered = [c for c in refined_candidates if float((c.get("rating_stats") or {}).get("mean", 3.5)) >= 4.0]
+        if len(filtered) >= 3:
+            refined_candidates = filtered
+            log.info("  ↳ Premium filter applied: %d candidates retained", len(refined_candidates))
+
     refined_ranked = rerank_candidates(
-        profile=state["profile"],
+        profile=blended_profile,
         candidates=refined_candidates,
         context_text=refined_context,
         session_history=history,
@@ -371,6 +500,9 @@ def multiturn_node(state: TaskBState) -> dict:
     if not refined_ranked:
         log.info("  ↳ Multiturn reranking returned 0 results; keeping original ranking.")
         return {"refined_context_text": refined_context}
+
+    log.info("  ↳ Multiturn re-ranked %d recommendations (budget=%s, premium=%s)",
+             len(refined_ranked), intent["budget_mode"], intent["premium_mode"])
 
     return {
         "refined_context_text": refined_context,
