@@ -36,7 +36,7 @@ services:
       - "8000:8000"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gemma-4-26b-a4b-it}
+      - LLM_MODEL=${LLM_MODEL:-gemini-flash-latest}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - HF_HOME=/app/scratch/cache/huggingface
     volumes:
@@ -61,7 +61,7 @@ services:
     container_name: ego-indexer
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gemma-4-26b-a4b-it}
+      - LLM_MODEL=${LLM_MODEL:-gemini-flash-latest}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - DATASET_BASE_URL=${DATASET_BASE_URL}
       - HF_HOME=/app/scratch/cache/huggingface
@@ -73,8 +73,6 @@ services:
       - tools
     networks:
       - ego-network
-
-
 
 volumes:
   llm_cache:

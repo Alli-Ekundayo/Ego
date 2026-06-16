@@ -28,13 +28,13 @@ The system is grounded in real Jumia product reviews scraped from the Nigerian m
                │ rating_prediction │   │ context_extraction_node      │
                │ style_analysis    │   │ aspect_extraction_node       │
                │ review_generation │   │ cold_start_node (if needed)  │
-               │ naija_injection   │   │ hybrid_retrieval_node        │
-               └───────────────────┘   │   ├─ Dense ANN (Turbovec)    │
+               └───────────────────┘   │ hybrid_retrieval_node        │
+                                       │   ├─ Dense ANN (Turbovec)    │
                                        │   ├─ Collaborative Filtering  │
                                        │   └─ Sparse BM25 (RRF fusion) │
                                        │ reranking_node               │
-                                       │   ├─ Cross-encoder Stage 1   │
-                                       │   └─ LLM Personalisation     │
+                                       │   ├─ Blended local scorer    │
+                                       │   └─ LLM reason generation   │
                                        │ multiturn_node               │
                                        └──────────────────────────────┘
 ```
@@ -45,11 +45,10 @@ Simulates how a given user would rate and review a product.
 
 | Node | Purpose |
 |---|---|
-| `profile_retrieval_node` | Load the user's historical reviews from Turbovec |
+| `profile_retrieval_node` | Load the user's historical reviews from Turbovec; compute per-aspect exemplars via embedding cosine |
 | `rating_prediction_node` | Predict a 1–5 star rating using persona similarity |
-| `style_analysis_node` | Extract writing style signals from past reviews |
-| `review_generation_node` | Generate a review with Gemini (RAG over past reviews) |
-| `naija_injection_node` | Rewrite the review in authentic Naija voice (RAG over Jumia examples) |
+| `style_analysis_node` | Derive a writing-style profile from review statistics (length, TTR, tone) — no LLM call |
+| `review_generation_node` | Generate a review with authentic Naija voice in a single LLM call (RAG over past reviews + Jumia examples) |
 
 ### Task B — Contextual Recommendation
 
@@ -62,7 +61,7 @@ Returns ranked product recommendations for a user given a conversational context
 | `aspect_extraction_node` | Extract product aspects and generate BM25 keyword tokens |
 | `cold_start_node` | Build a proxy embedding from the nearest user cluster (new users only) |
 | `hybrid_retrieval_node` | Dense ANN + Collaborative Filtering + BM25, fused via Reciprocal Rank Fusion |
-| `reranking_node` | Cross-encoder pre-rank → LLM personalisation pass |
+| `reranking_node` | Blended local scorer (CE + aspect cosine + category preference + retrieval) → LLM reason generation |
 | `multiturn_node` | Conversational refinement: re-retrieves on detected preference shifts |
 
 ---
@@ -72,7 +71,7 @@ Returns ranked product recommendations for a user given a conversational context
 | Component | Technology |
 |---|---|
 | Agent framework | [LangGraph](https://github.com/langchain-ai/langgraph) |
-| LLM | Google Gemini (`gemma-4-26b-a4b-it` by default, configurable) |
+| LLM | Google Gemini (`gemini-flash-latest` by default, configurable) |
 | Embeddings | `all-MiniLM-L6-v2` via [SentenceTransformers](https://www.sbert.net/) |
 | Vector store | [Turbovec](https://pypi.org/project/turbovec/) |
 | Sparse retrieval | BM25 via `rank-bm25` |
@@ -93,14 +92,13 @@ Ego/
 │   └── schemas.py           # Pydantic request/response models
 │
 ├── agents/
-│   ├── rerank_agent.py      # Two-stage reranker: cross-encoder + LLM
-│   ├── retrieval_agent.py   # Hybrid retrieval: Dense ANN + CF + BM25 (RRF)
-│   └── style_agent.py       # Writing style extractor (utility class)
+│   ├── rerank_agent.py      # Blended local scorer + LLM reason generation
+│   └── retrieval_agent.py   # Hybrid retrieval: Dense ANN + CF + BM25 (RRF)
 │
 ├── core/
 │   ├── aspect_extractor.py  # Rule-based aspect extraction + sparse keyword tokens
 │   ├── config.py            # Pydantic settings (reads .env)
-│   ├── cross_encoder.py     # Cross-encoder scoring with persona intensity weighting
+│   ├── cross_encoder.py     # Cross-encoder + aspect alignment + category preference scoring
 │   ├── embeddings.py        # SentenceTransformer wrapper with diskcache
 │   ├── hybrid_search.py     # BM25 corpus builder + Reciprocal Rank Fusion
 │   ├── llm.py               # Gemini singleton with SQLite response caching
@@ -151,7 +149,7 @@ Edit `.env` and set your API key:
 
 ```dotenv
 GOOGLE_API_KEY=your_google_api_key_here
-LLM_MODEL=gemma-4-26b-a4b-it          # or any Gemini model you have access to
+LLM_MODEL=gemini-flash-latest          # or any Gemini model you have access to
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 DATASET_BASE_URL=https://huggingface.co/datasets/DreamerX/Ego-Jumia-Review/resolve/main
 ```
@@ -210,7 +208,7 @@ Simulates how a specific user would rate and review a product.
 ```json
 {
   "rating": 4.2,
-  "review": "This phone is quite solid for the price. Battery lasts all day...",
+  "review": "This phone is quite solid for the price. Battery lasts all day, camera sharp well well.",
   "naija_review": "Chai, this phone don cast o! Battery life strong well well, camera clear like HD..."
 }
 ```
@@ -265,18 +263,33 @@ Returns personalised product recommendations for a user.
 
 The retrieval stage fuses three signals using Reciprocal Rank Fusion (k=60):
 
-1. **Dense ANN** — Turbovec cosine-similarity search over user history embeddings (weight: 0.7)
+1. **Dense ANN** — Turbovec cosine-similarity search over user history embeddings
 2. **Collaborative Filtering** — Cosine similarity over cross-domain projected user vectors
-3. **Sparse BM25** — Keyword search over the full review corpus (weight: 0.3)
+3. **Sparse BM25** — Keyword search over the full review corpus
 
 Items appearing in multiple ranked lists receive a compounded RRF boost.
 
-### Two-Stage Reranking
+### Embedding-Based Reranking
 
 After retrieval, a two-stage reranker narrows from ~100 candidates to the final top-N:
 
-1. **Cross-encoder** (`ms-marco-MiniLM-L-6-v2`) — Scores each `(query, candidate)` pair locally with no API cost. Applies a persona-conditioned emotional intensity multiplier based on the user's historical rating variance. Prunes to top-30.
-2. **LLM personalisation** — Gemini reads the top-30 candidates and the user profile, returning a ranked list with natural-language reasoning for each recommendation.
+1. **Blended local scorer** — Combines four signals entirely on-device with no API cost:
+   - Cross-encoder score (`ms-marco-MiniLM-L-6-v2`) — pairwise relevance
+   - Aspect alignment — cosine similarity between candidate embeddings and the user's target aspect query embeddings
+   - Category preference weight — from the user's historical category distribution
+   - Retrieval score — upstream RRF signal
+
+   A persona-conditioned emotional intensity multiplier (derived from rating variance) is applied across the blend. Prunes to top-N deterministically.
+
+2. **LLM reason generation** — Gemini receives only the top-N pre-ranked items (~300 tokens) and writes a short personalised reason per item. It does not re-rank; if it fails, templated reasons are used and the ranking is preserved.
+
+### Task A: LLM Call Reduction
+
+The Task A pipeline runs **one LLM call** per invocation:
+
+- **Style analysis** is computed statistically from review text (avg word length, type-token ratio, rating distribution, recurring bigrams) — no LLM required.
+- **Naija voice injection** is merged into the generation prompt rather than running as a separate rewrite pass, eliminating voice drift and one full round-trip.
+- **Aspect exemplars** are extracted by embedding cosine similarity over the user's own reviews, giving the generation LLM targeted evidence (e.g. what the user wrote about battery life) instead of bare aspect labels.
 
 ### Cold-Start Handling
 
@@ -284,10 +297,6 @@ New users with no Turbovec profile are routed through `cold_start_node`, which:
 - Parses the `persona_description` into explicit/implicit signals via the context extraction node
 - Maps the persona to the nearest user cluster centroid using cosine similarity
 - Uses the centroid as a proxy embedding for the retrieval stage
-
-### Naija Voice Injection
-
-Review generation uses RAG over a `naija_style_examples` Turbovec collection, seeded from real Jumia customer reviews. The LLM is instructed to match the retrieved examples' tone, producing outputs with authentic Nigerian linguistic patterns.
 
 ### Caching Strategy
 
@@ -331,11 +340,11 @@ PYTHONPATH=. python scripts/evaluate.py --task both
 PYTHONPATH=. python scripts/run_ablations.py --limit 5
 ```
 
-Runs three ablation conditions:
+Runs four ablation conditions:
 - **Baseline** — Full pipeline
 - **No Jumia Context** — Task A without Naija style examples
 - **No BM25** — Task B with dense-only retrieval
-- **No Cross-Encoder** — Task B with LLM reranking only
+- **No Cross-Encoder** — Task B without the local blended scorer
 
 ---
 
@@ -380,9 +389,8 @@ uvicorn api.main:app --reload --port 8000
 | Variable | Default | Description |
 |---|---|---|
 | `GOOGLE_API_KEY` | *(required)* | Google AI Studio or Vertex AI key for Gemini |
-| `LLM_MODEL` | `gemma-4-26b-a4b-it` | Gemini model name |
+| `LLM_MODEL` | `gemini-flash-latest` | Gemini model name |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformer model name |
-| `DATASET_BASE_URL` | *(see `.env.example`)* | Base URL for dataset files (HuggingFace or custom host) |
 | `DATASET_BASE_URL` | *(see `.env.example`)* | Base URL for dataset files (HuggingFace or custom host) |
 
 ---

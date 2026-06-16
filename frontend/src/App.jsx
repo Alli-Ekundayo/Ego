@@ -450,7 +450,7 @@ function HomePage() {
     { icon: Cpu, label: "FastAPI Gateway", value: "api/main.py", detail: "Bootstrap, lifecycle, and routing." },
     { icon: Brain, label: "LangGraph Pipelines", value: "graphs/task_a.py + task_b.py", detail: "Task graphs and node orchestration." },
     { icon: Database, label: "Hybrid Retrieval", value: "Turbovec + BM25 + RRF", detail: "Dense and sparse fusion." },
-    { icon: Sparkle, label: "Model Stack", value: "gemma-4-26b-a4b-it + all-MiniLM-L6-v2", detail: "LLM and embeddings." },
+    { icon: Sparkle, label: "Model Stack", value: "gemini-flash-latest + all-MiniLM-L6-v2", detail: "LLM and embeddings." },
   ];
 
   const modules = [
@@ -526,7 +526,7 @@ function HomePage() {
             <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-28px_rgba(15,23,42,0.25)] dark:shadow-[0_20px_40px_-28px_rgba(0,0,0,0.5)] sm:col-span-2">
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Model stack</p>
               <h3 className="mt-2 text-xl font-semibold text-zinc-950 dark:text-white">
-                gemma-4-26b-a4b-it + all-MiniLM-L6-v2
+                gemini-flash-latest + all-MiniLM-L6-v2
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
                 LLM reasoning is paired with a compact embedding model for retrieval, similarity,
@@ -692,7 +692,7 @@ function HomePage() {
           </div>
           <div className="mt-8 rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4 text-xs text-zinc-650 dark:text-zinc-400">
             <p>
-              Default LLM: <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">gemma-4-26b-a4b-it</span>
+              Default LLM: <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">gemini-flash-latest</span>
             </p>
             <p>
               Embeddings: <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">all-MiniLM-L6-v2</span>

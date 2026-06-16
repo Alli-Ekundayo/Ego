@@ -62,15 +62,52 @@ def _format_reviews(reviews: list[dict], max_chars: int = MAX_REVIEW_CHARS) -> s
     return "\n".join(lines)
 
 
-def _build_style_profile(reviews: list[dict]) -> str:
-    """Generate a statistical style profile without calling the LLM."""
+def _build_rich_style_profile(reviews: list[dict]) -> str:
+    """
+    Derive a rich, LLM-free style profile from review statistics.
+
+    Computes: sentence length distribution, vocabulary richness (TTR),
+    dominant tone from rating distribution, and recurring bigrams.
+    The output string is structured to guide the generation LLM directly.
+    """
     texts = [(r.get("title", "") + " " + r.get("body", "")).strip() for r in reviews]
     texts = [t for t in texts if t]
     if not texts:
         return "Neutral style. Short-to-medium sentences with direct wording."
 
-    word_counts = [len(tokenize(t)) for t in texts]
+    all_tokens: list[str] = []
+    word_counts: list[int] = []
+    for t in texts:
+        toks = tokenize(t)
+        word_counts.append(len(toks))
+        all_tokens.extend(toks)
+
     avg_words = int(sum(word_counts) / len(word_counts)) if word_counts else 0
+    ttr = len(set(all_tokens)) / len(all_tokens) if all_tokens else 0.5
+
+    if avg_words < 8:
+        length_desc = "very terse (fragment-style)"
+    elif avg_words < 18:
+        length_desc = "short"
+    elif avg_words < 35:
+        length_desc = "medium"
+    else:
+        length_desc = "verbose"
+
+    richness_desc = "minimal, repetitive vocabulary" if ttr < 0.55 else (
+        "moderately varied vocabulary" if ttr < 0.75 else "rich vocabulary"
+    )
+
+    ratings = [float(r.get("rating", 3.0)) for r in reviews if "rating" in r]
+    if ratings:
+        avg_rating = sum(ratings) / len(ratings)
+        tone_desc = (
+            "enthusiastic and positive" if avg_rating >= 4.5 else
+            "generally positive" if avg_rating >= 3.5 else
+            "mixed or critical"
+        )
+    else:
+        tone_desc = "practical and review-focused"
 
     phrase_counts: dict[str, int] = {}
     for t in texts:
@@ -78,18 +115,18 @@ def _build_style_profile(reviews: list[dict]) -> str:
         for i in range(len(toks) - 1):
             bigram = f"{toks[i]} {toks[i + 1]}"
             phrase_counts[bigram] = phrase_counts.get(bigram, 0) + 1
-
     common_phrases = sorted(
         (p for p, c in phrase_counts.items() if c > 1),
         key=lambda p: phrase_counts[p],
         reverse=True,
     )[:3]
-    phrase_text = ", ".join(common_phrases) if common_phrases else "none repeated"
+    phrase_text = ", ".join(common_phrases) if common_phrases else "none"
 
     return (
-        f"Average length: {avg_words} words. "
-        f"Frequently repeated phrases: {phrase_text}. "
-        "Tone is practical and review-focused."
+        f"Sentence style: {length_desc} (~{avg_words} words avg). "
+        f"Vocabulary: {richness_desc} (TTR={ttr:.2f}). "
+        f"Tone: {tone_desc}. "
+        f"Recurring phrases: {phrase_text}."
     )
 
 
@@ -111,6 +148,7 @@ class UserAgentState(TypedDict):
     extracted_aspects: list[str]
     aspect_queries: list[str]
     sparse_keywords: list[str]
+    aspect_exemplars: dict  # {aspect_label: best_matching_review_snippet}
 
 
 def profile_retrieval_node(state: UserAgentState) -> dict:
@@ -195,6 +233,27 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
     except Exception as exc:
         log.warning("Could not rank reviews: %s", exc)
 
+    # Per-aspect exemplar extraction ----------------------------------------
+    # For each extracted aspect, find the user's own review that best matches
+    # that aspect embedding. This gives the generation LLM targeted evidence
+    # ("the user wrote X about battery life") instead of generic aspect labels.
+    aspect_exemplars: dict[str, str] = {}
+    if aspect_embs and retrieved_examples and example_embeddings:
+        for asp, aq_emb in zip(extracted_aspects, aspect_embs):
+            best_r, best_score = None, -1.0
+            for r, emb in zip(retrieved_examples, example_embeddings):
+                score = cosine_similarity(emb, aq_emb)
+                if score > best_score:
+                    best_score, best_r = score, r
+            if best_r is not None:
+                snippet = (
+                    best_r.get("title", "") + " " + best_r.get("body", "")
+                ).strip()[:140]
+                if snippet:
+                    aspect_exemplars[asp] = snippet
+    log.info("  ↳ Aspect exemplars computed: %d", len(aspect_exemplars))
+    # -------------------------------------------------------------------------
+
     naija_examples = []
     try:
         naija_results = vector_store.search(
@@ -219,6 +278,7 @@ def profile_retrieval_node(state: UserAgentState) -> dict:
         "extracted_aspects": extracted_aspects,
         "aspect_queries": aspect_queries,
         "sparse_keywords": sparse_keywords,
+        "aspect_exemplars": aspect_exemplars,
     }
 
 
@@ -254,28 +314,33 @@ def rating_prediction_node(state: UserAgentState) -> dict:
 
 
 def style_analysis_node(state: UserAgentState) -> dict:
-    """Task A - Node 3: User Writing Style Analysis"""
+    """
+    Task A - Node 3: User Writing Style Analysis (stat-based, no LLM).
+
+    Derives a structured style description from review statistics:
+    length distribution, vocabulary richness (TTR), tone from rating mean,
+    and recurring bigrams. This replaces the previous LLM call, saving one
+    full cloud round-trip per Task A invocation while producing equally
+    useful guidance for the generation prompt.
+    """
     reviews = state.get("retrieved_examples", [])
     if not reviews:
         return {"style_profile": "Neutral style. Short-to-medium sentences with direct wording."}
-
-    prompt = ChatPromptTemplate.from_template(
-        "Analyze the user's writing style from these review snippets.\n"
-        "Focus on sentence length, tone, common phrasing, and directness.\n"
-        "Return a concise 2-3 sentence profile.\n\n"
-        "Reviews:\n{reviews}\n"
-    )
-    llm = get_llm(settings.LLM_MODEL, temperature=0.2)
-    chain = prompt | llm | StrOutputParser()
-    try:
-        style_profile = chain.invoke({"reviews": _format_reviews(reviews)})
-    except Exception:
-        style_profile = _build_style_profile(reviews)
-    return {"style_profile": style_profile}
+    return {"style_profile": _build_rich_style_profile(reviews)}
 
 
 def review_generation_node(state: UserAgentState) -> dict:
-    """Task A - Node 4: Review Generation"""
+    """
+    Task A - Node 4: Review Generation with Naija Voice (merged, single LLM call).
+
+    Previously split across two nodes (review_generation_node + naija_injection_node),
+    each making a separate LLM call. The Naija injection rewrote what the first call
+    generated, introducing voice drift. Merging into one prompt:
+      - Eliminates one full LLM round-trip per invocation.
+      - Keeps the Naija voice authentic to the user's style (no rewrite step).
+      - Injects per-aspect exemplars (embedding-selected from the user's own reviews)
+        as targeted evidence instead of a bare aspect-label hint string.
+    """
     item = state.get("item_metadata", {})
     examples = state.get("retrieved_examples", [])
     style_profile = state.get("style_profile", "")
@@ -299,11 +364,31 @@ def review_generation_node(state: UserAgentState) -> dict:
         else "- No historical examples available."
     )
 
+    # Aspect exemplars: targeted evidence from the user's own reviews,
+    # one per aspect, selected by embedding cosine in profile_retrieval_node.
+    aspect_exemplars: dict = state.get("aspect_exemplars", {})
     extracted_aspects = state.get("extracted_aspects", [])
-    aspect_hint = (
-        f"Key aspects to address in the review: {', '.join(extracted_aspects)}.\n"
-        if extracted_aspects
-        else ""
+    if aspect_exemplars:
+        exemplar_lines = [
+            f"  - {asp}: '{snippet}'"
+            for asp, snippet in aspect_exemplars.items()
+        ]
+        aspect_hint = (
+            f"Key aspects to address (with examples from this user's past reviews):\n"
+            + "\n".join(exemplar_lines)
+        )
+    elif extracted_aspects:
+        aspect_hint = f"Key aspects to address in the review: {', '.join(extracted_aspects)}."
+    else:
+        aspect_hint = ""
+
+    # Naija voice examples retrieved by embedding similarity in profile_retrieval_node.
+    naija_examples = state.get("naija_examples", [])
+    naija_blocks = [f"- {nx.get('text', '').strip()}" for nx in naija_examples if nx.get("text")]
+    naija_text = (
+        "\n".join(naija_blocks)
+        if naija_blocks
+        else "- Keep it authentic to a Nigerian e-commerce platform."
     )
 
     prompt = ChatPromptTemplate.from_template(
@@ -311,10 +396,14 @@ def review_generation_node(state: UserAgentState) -> dict:
         "Write ONE new review for the unseen target item in the user's voice.\n"
         "Do not copy any example verbatim. Reuse style patterns naturally.\n"
         "The review must match the target rating sentiment and mention the target item context.\n"
+        "Add a subtle and natural 'Naija' (Nigerian) nuance to the writing style "
+        "(e.g. slight local phrasing or vocabulary) as shown in the local examples below, "
+        "but avoid making it exaggerated or overly thick.\n"
         "{aspect_hint}\n"
         "Return plain text only.\n\n"
         "User style profile:\n{style_profile}\n\n"
         "Historical user reviews:\n{few_shot_text}\n\n"
+        "Authentic Naija voice examples for inspiration:\n{naija_text}\n\n"
         "Target item:\n"
         "- Name: {item_name}\n"
         "- Category: {item_category}\n"
@@ -325,7 +414,7 @@ def review_generation_node(state: UserAgentState) -> dict:
     llm = get_llm(settings.LLM_MODEL, temperature=0.35)
     chain = prompt | llm | StrOutputParser()
 
-    simulated_review = ""
+    final_review = ""
     last_error: Exception | None = None
     for attempt in range(3):
         try:
@@ -338,60 +427,6 @@ def review_generation_node(state: UserAgentState) -> dict:
                     "item_description": item_description,
                     "predicted_rating": predicted_rating,
                     "aspect_hint": aspect_hint,
-                }
-            )
-            simulated_review = clean_review_text(generated)
-            if simulated_review:
-                break
-        except Exception as exc:
-            last_error = exc
-            if attempt < 2:
-                time.sleep(2**attempt)
-
-    if not simulated_review:
-        if last_error:
-            log.warning("Review generation fell back: %s", last_error)
-        simulated_review = clean_review_text(
-            f"I have mixed feelings but it works as expected. For the {item_name}, I'd rate it {predicted_rating}/5."
-        )
-
-    return {"simulated_review": simulated_review}
-
-
-def naija_injection_node(state: UserAgentState) -> dict:
-    """Task A - Node 5: Naija Voice Injection"""
-    simulated_review = state.get("simulated_review", "")
-    naija_examples = state.get("naija_examples", [])
-    
-    naija_blocks = []
-    for nx in naija_examples:
-        text = nx.get("text", "").strip()
-        if text:
-            naija_blocks.append(f"- {text}")
-    naija_text = (
-        "\n".join(naija_blocks) if naija_blocks else "- No local examples available."
-    )
-
-    prompt = ChatPromptTemplate.from_template(
-        "You are rewriting a product review to have a natural 'Naija' (Nigerian) nuance.\n"
-        "Rewrite the following review to include subtle Nigerian phrasing, slang, or vocabulary.\n"
-        "Do not make it exaggerated or overly thick; keep it authentic to a Nigerian e-commerce platform.\n"
-        "Base the tone and style on the authentic Naija voice examples provided below.\n"
-        "Return plain text only.\n\n"
-        "Original review:\n{simulated_review}\n\n"
-        "Authentic Naija voice examples for inspiration:\n{naija_text}\n\n"
-        "Naija review:"
-    )
-    llm = get_llm(settings.LLM_MODEL, temperature=0.4)
-    chain = prompt | llm | StrOutputParser()
-
-    final_review = ""
-    last_error: Exception | None = None
-    for attempt in range(3):
-        try:
-            generated = chain.invoke(
-                {
-                    "simulated_review": simulated_review,
                     "naija_text": naija_text,
                 }
             )
@@ -404,11 +439,13 @@ def naija_injection_node(state: UserAgentState) -> dict:
                 time.sleep(2**attempt)
 
     if not final_review:
-        final_review = simulated_review
         if last_error:
-            log.warning("Naija injection fell back: %s", last_error)
+            log.warning("Review generation fell back: %s", last_error)
+        final_review = clean_review_text(
+            f"I have mixed feelings but it works as expected. For the {item_name}, I'd rate it {predicted_rating}/5."
+        )
 
-    return {"final_review": final_review}
+    return {"simulated_review": final_review, "final_review": final_review}
 
 
 def build_user_modeling_agent():
@@ -417,14 +454,14 @@ def build_user_modeling_agent():
     workflow.add_node("rating_prediction_node", rating_prediction_node)
     workflow.add_node("style_analysis_node", style_analysis_node)
     workflow.add_node("review_generation_node", review_generation_node)
-    workflow.add_node("naija_injection_node", naija_injection_node)
+    # naija_injection_node removed — Naija voice is now merged into
+    # review_generation_node as a single combined prompt.
 
     workflow.set_entry_point("profile_retrieval_node")
     workflow.add_edge("profile_retrieval_node", "rating_prediction_node")
     workflow.add_edge("rating_prediction_node", "style_analysis_node")
     workflow.add_edge("style_analysis_node", "review_generation_node")
-    workflow.add_edge("review_generation_node", "naija_injection_node")
-    workflow.add_edge("naija_injection_node", END)
+    workflow.add_edge("review_generation_node", END)
 
     return workflow.compile()
 

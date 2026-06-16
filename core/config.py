@@ -7,7 +7,7 @@ class Settings(BaseSettings):
 
     GOOGLE_API_KEY: SecretStr = SecretStr("")
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
-    LLM_MODEL: str = "gemma-4-26b-a4b-it"
+    LLM_MODEL: str = "gemini-flash-latest"
     TURBOVEC_STORAGE_DIR: str = "scratch/cache/turbovec"
 
 
