@@ -171,7 +171,22 @@ function buildPersonaSummary(user) {
   return `${category} explorer`;
 }
 
-function UserDashboard({ title, users, loading, selectedUserId, onChange, selectedUser }) {
+function UserDashboard({ title, users, loading, selectedUserId, onChange, selectedUser, color = "emerald" }) {
+  const colorMap = {
+    emerald: {
+      badgeBorder: "border-emerald-200/70 dark:border-emerald-900/50",
+      badgeBg: "bg-emerald-50/80 dark:bg-emerald-950/40",
+      badgeText: "text-emerald-700 dark:text-emerald-400",
+      statText: "text-emerald-600 dark:text-emerald-450",
+    },
+    orange: {
+      badgeBorder: "border-orange-200/70 dark:border-orange-900/50",
+      badgeBg: "bg-orange-50/80 dark:bg-orange-950/40",
+      badgeText: "text-orange-700 dark:text-orange-400",
+      statText: "text-orange-600 dark:text-orange-450",
+    }
+  };
+  const themeStyles = colorMap[color] || colorMap.emerald;
   const stats = [
     {
       label: "Past reviews",
@@ -196,12 +211,12 @@ function UserDashboard({ title, users, loading, selectedUserId, onChange, select
   ];
 
   return (
-    <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-12 relative z-10">
+    <section className="mx-auto max-w-[85rem] px-4 pb-20 sm:px-6 lg:px-12 relative z-10">
       <div className="rounded-[2.5rem] border border-zinc-200/70 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_50px_-36px_rgba(0,0,0,0.7)] backdrop-blur">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50/80 dark:bg-emerald-950/40 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-400">
-              <PulseDot />
+            <div className={`inline-flex items-center gap-2 rounded-full border ${themeStyles.badgeBorder} ${themeStyles.badgeBg} px-3 py-1 text-[10px] uppercase tracking-[0.22em] ${themeStyles.badgeText}`}>
+              <PulseDot color={color} />
               User dashboard
             </div>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">{title}</h2>
@@ -244,7 +259,7 @@ function UserDashboard({ title, users, loading, selectedUserId, onChange, select
               className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4"
             >
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">{stat.label}</p>
-              <p className="mt-2 text-2xl font-semibold text-emerald-600 dark:text-emerald-450">
+              <p className={`mt-2 text-2xl font-semibold ${themeStyles.statText}`}>
                 <span className="font-mono">{stat.value}</span>
               </p>
               <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-450">{stat.note}</p>
@@ -269,7 +284,7 @@ function Shell({ footerText, footerLinks, footerMeta, children }) {
         Skip to content
       </a>
 
-      <nav className="fixed left-1/2 top-4 z-40 mx-auto flex h-16 w-[min(100%-2rem,72rem)] -translate-x-1/2 items-center justify-between px-4 sm:px-6 lg:px-10 transition-colors duration-305">
+      <nav className="fixed left-1/2 top-4 z-40 mx-auto flex h-16 w-[min(100%-2rem,85rem)] -translate-x-1/2 items-center justify-between px-4 sm:px-6 lg:px-10 transition-colors duration-305">
         <div className="flex items-center gap-3 font-medium tracking-tight">
           <AppLink href="/" className="text-lg font-semibold text-zinc-950 dark:text-white transition-colors hover:text-zinc-900 dark:hover:text-zinc-200">
             Ego
@@ -344,7 +359,7 @@ function Shell({ footerText, footerLinks, footerMeta, children }) {
         {children}
 
         <footer className="mt-24 relative z-10">
-          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-12">
+          <div className="mx-auto max-w-[85rem] px-4 py-16 sm:px-6 lg:px-12">
             <div className="grid grid-cols-1 gap-12 pb-14 md:grid-cols-2">
               <div className="max-w-md">
                 <div className="mb-5 flex items-center gap-2">
@@ -495,7 +510,7 @@ function HomePage() {
       ]}
       footerMeta="Data: data/items.json - data/user_profiles.json - data/jumia_reviews.json"
     >
-      <Section id="top" className="relative mx-auto max-w-7xl px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
+      <Section id="top" className="relative mx-auto max-w-[85rem] px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
         <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="relative">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50/80 dark:bg-emerald-950/40 px-4 py-1.5 text-[10px] uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-450">
@@ -503,7 +518,7 @@ function HomePage() {
               Jumia Nigeria recommendation studio
             </div>
             <h1 className="mt-8 text-4xl font-semibold tracking-tighter leading-none text-zinc-950 dark:text-white md:text-6xl">
-              Ego maps <span className="text-emerald-600 dark:text-emerald-450 italic font-serif">shopper intent</span> to grounded results.
+              Ego maps <span className="text-emerald-600 dark:text-emerald-450 italic font-display text-[1.1em]">shopper intent</span> to grounded results.
             </h1>
             <p className="mt-6 max-w-[60ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
               Run Task A to simulate culturally aligned reviews. Run Task B to return ranked
@@ -573,7 +588,7 @@ function HomePage() {
         </div>
       </Section>
 
-      <Section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <motion.div
           className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]"
           variants={{ show: { transition: { staggerChildren: 0.12 } } }}
@@ -619,7 +634,7 @@ function HomePage() {
         </motion.div>
       </Section>
 
-      <Section id="api" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section id="api" className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_20px_40px_-30px_rgba(0,0,0,0.5)]">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div className="flex w-full items-start gap-3 md:w-auto md:items-center">
@@ -648,7 +663,7 @@ function HomePage() {
         </div>
       </Section>
 
-      <Section id="dataset" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section id="dataset" className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-450">
@@ -687,7 +702,7 @@ function HomePage() {
         </div>
       </Section>
 
-      <Section id="architecture" className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section id="architecture" className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-8 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)]">
           <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Architecture</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -720,7 +735,7 @@ function HomePage() {
         </div>
       </Section>
 
-      <Section id="modules" className="mx-auto max-w-7xl px-4 pb-28 sm:px-6 lg:px-12 relative z-10">
+      <Section id="modules" className="mx-auto max-w-[85rem] px-4 pb-28 sm:px-6 lg:px-12 relative z-10">
         <div className="border-t border-zinc-200/70 dark:border-zinc-800/70 pt-10">
           <p className="mb-6 text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
             Key modules
@@ -763,7 +778,7 @@ function TaskAPage() {
       ]}
       footerMeta="Output: SimulateReviewResponse with rating and review"
     >
-      <Section id="top" className="relative mx-auto max-w-7xl px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
+      <Section id="top" className="relative mx-auto max-w-[85rem] px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50/80 dark:bg-emerald-950/40 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-450">
           <PulseDot />
           POST /simulate-review
@@ -771,7 +786,7 @@ function TaskAPage() {
 
         <div className="mt-10 max-w-3xl">
           <h1 className="text-4xl font-semibold tracking-tighter leading-none text-zinc-950 dark:text-white md:text-6xl">
-            Task A dashboard for user modelling.
+            <span className="text-emerald-600 dark:text-emerald-450 italic font-display text-[1.08em]">Task A</span> dashboard for user modelling.
           </h1>
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
             Select a user, inspect their profile summary, then run the review simulation endpoint
@@ -805,9 +820,10 @@ function TaskAPage() {
         selectedUserId={effectiveSelectedUserId}
         onChange={setSelectedUserId}
         selectedUser={selectedUser}
+        color="emerald"
       />
 
-      <Section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
           <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Task A endpoint</p>
@@ -846,15 +862,15 @@ function TaskBPage() {
       ]}
       footerMeta="Output: RecommendResponse with ranked recommendations"
     >
-      <Section id="top" className="relative mx-auto max-w-7xl px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
+      <Section id="top" className="relative mx-auto max-w-[85rem] px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
         <div className="inline-flex items-center gap-2 rounded-full border border-orange-200/70 dark:border-orange-900/50 bg-orange-50/80 dark:bg-orange-950/40 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-orange-700 dark:text-orange-450">
-          <PulseDot />
+          <PulseDot color="orange" />
           POST /recommend
         </div>
 
         <div className="mt-10 max-w-3xl">
           <h1 className="text-4xl font-semibold tracking-tighter leading-none text-zinc-950 dark:text-white md:text-6xl">
-            Task B dashboard for contextual recommendations.
+            <span className="text-orange-600 dark:text-orange-450 italic font-display text-[1.08em]">Task B</span> dashboard for contextual recommendations.
           </h1>
           <p className="mt-6 max-w-xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
             Select a user, inspect the profile dashboard, then run the recommendation
@@ -872,11 +888,11 @@ function TaskBPage() {
             <ArrowRight size={16} weight="bold" className="transition group-hover:translate-x-1" />
           </MagneticButton>
           <AppLink
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:ring-offset-2"
             href="/task-a"
           >
             See Task A
-            <ArrowRight size={14} weight="bold" className="text-emerald-600" />
+            <ArrowRight size={14} weight="bold" className="text-orange-600" />
           </AppLink>
         </div>
       </Section>
@@ -888,9 +904,10 @@ function TaskBPage() {
         selectedUserId={effectiveSelectedUserId}
         onChange={setSelectedUserId}
         selectedUser={selectedUser}
+        color="orange"
       />
 
-      <Section className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
+      <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="flex flex-col gap-6">
           <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Task B endpoint</p>
@@ -927,7 +944,7 @@ function NotFoundPage() {
       ]}
       footerMeta="404 - route not found"
     >
-      <Section className="relative mx-auto max-w-7xl px-4 pb-32 pt-32 sm:px-6 lg:px-12 relative z-10">
+      <Section className="relative mx-auto max-w-[85rem] px-4 pb-32 pt-32 sm:px-6 lg:px-12 relative z-10">
         <div className="max-w-2xl">
           <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">404</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tighter text-zinc-950 dark:text-white md:text-6xl">
