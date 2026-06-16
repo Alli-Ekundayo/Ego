@@ -14,9 +14,15 @@ import {
 } from "@phosphor-icons/react";
 import { useUsers } from "./hooks/useUsers";
 
-let globalTheme = typeof window !== "undefined"
-  ? (localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"))
-  : "light";
+let globalTheme = "dark";
+if (typeof window !== "undefined") {
+  globalTheme = localStorage.getItem("theme") || "dark";
+  if (globalTheme === "dark") {
+    window.document.documentElement.classList.add("dark");
+  } else {
+    window.document.documentElement.classList.remove("dark");
+  }
+}
 
 const themeListeners = new Set();
 
