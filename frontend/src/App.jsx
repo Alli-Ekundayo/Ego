@@ -269,7 +269,7 @@ function Shell({ footerText, footerLinks, footerMeta, children }) {
         Skip to content
       </a>
 
-      <nav className="fixed left-1/2 top-4 z-40 mx-auto flex h-16 w-[min(100%-2rem,72rem)] -translate-x-1/2 items-center justify-between rounded-full border border-zinc-200/60 bg-white/75 px-4 shadow-[0_12px_30px_-18px_rgba(15,23,42,0.15)] backdrop-blur-xl sm:px-6 lg:rounded-2xl lg:px-10 dark:border-zinc-800/60 dark:bg-zinc-900/75 dark:shadow-[0_12px_30px_-18px_rgba(0,0,0,0.5)] transition-colors duration-305">
+      <nav className="fixed left-1/2 top-4 z-40 mx-auto flex h-16 w-[min(100%-2rem,72rem)] -translate-x-1/2 items-center justify-between px-4 sm:px-6 lg:px-10 transition-colors duration-305">
         <div className="flex items-center gap-3 font-medium tracking-tight">
           <AppLink href="/" className="text-lg font-semibold text-zinc-950 dark:text-white transition-colors hover:text-zinc-900 dark:hover:text-zinc-200">
             Ego
@@ -343,9 +343,9 @@ function Shell({ footerText, footerLinks, footerMeta, children }) {
 
         {children}
 
-        <footer className="mt-24 border-t border-zinc-200/70 bg-white/60 dark:border-zinc-800/70 dark:bg-zinc-950/60 relative z-10">
+        <footer className="mt-24 relative z-10">
           <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-12">
-            <div className="grid grid-cols-1 gap-12 border-b border-zinc-200/70 dark:border-zinc-800/70 pb-14 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-12 pb-14 md:grid-cols-2">
               <div className="max-w-md">
                 <div className="mb-5 flex items-center gap-2">
                   <span className="text-lg font-semibold text-zinc-950 dark:text-white">Ego</span>
@@ -406,6 +406,14 @@ function HomePage() {
         "Evaluate on review quality, rating accuracy and behavioral fidelity",
       ],
       href: "/task-a",
+      styles: {
+        badgeBorder: "border-emerald-200/70 dark:border-emerald-900/50",
+        badgeBg: "bg-emerald-50 dark:bg-emerald-950/40",
+        badgeText: "text-emerald-700 dark:text-emerald-400",
+        bulletBg: "bg-emerald-500/70",
+        linkHover: "hover:text-emerald-600 dark:hover:text-emerald-450",
+        ringFocus: "focus:ring-emerald-500/40",
+      }
     },
     {
       id: "task-b",
@@ -420,6 +428,14 @@ function HomePage() {
         "Design agentic workflow that reason before recomending",
       ],
       href: "/task-b",
+      styles: {
+        badgeBorder: "border-orange-200/70 dark:border-orange-900/50",
+        badgeBg: "bg-orange-50 dark:bg-orange-950/40",
+        badgeText: "text-orange-700 dark:text-orange-400",
+        bulletBg: "bg-orange-500/70",
+        linkHover: "hover:text-orange-600 dark:hover:text-orange-450",
+        ringFocus: "focus:ring-orange-500/40",
+      }
     },
   ];
 
@@ -487,7 +503,7 @@ function HomePage() {
               Jumia Nigeria recommendation studio
             </div>
             <h1 className="mt-8 text-4xl font-semibold tracking-tighter leading-none text-zinc-950 dark:text-white md:text-6xl">
-              Ego maps <span className="text-emerald-600 dark:text-emerald-450">shopper intent</span> to grounded results.
+              Ego maps <span className="text-emerald-600 dark:text-emerald-450 italic font-serif">shopper intent</span> to grounded results.
             </h1>
             <p className="mt-6 max-w-[60ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
               Run Task A to simulate culturally aligned reviews. Run Task B to return ranked
@@ -503,11 +519,11 @@ function HomePage() {
                 <ArrowRight size={16} weight="bold" className="transition-transform group-hover:translate-x-1" />
               </MagneticButton>
               <AppLink
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3.5 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2"
+                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3.5 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:ring-offset-2"
                 href="/task-b"
               >
                 Open Task B
-                <ArrowRight size={14} weight="bold" className="text-emerald-600" />
+                <ArrowRight size={14} weight="bold" className="text-orange-600" />
               </AppLink>
             </div>
             <div className="mt-10 flex flex-wrap gap-6 text-xs text-zinc-500 dark:text-zinc-450">
@@ -575,7 +591,7 @@ function HomePage() {
                 variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } }}
                 layout
               >
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                <div className={`mb-4 inline-flex items-center gap-2 rounded-full border ${card.styles.badgeBorder} ${card.styles.badgeBg} px-3 py-1 text-xs font-medium ${card.styles.badgeText}`}>
                   <Icon size={14} weight="bold" />
                   {card.eyebrow}
                 </div>
@@ -584,7 +600,7 @@ function HomePage() {
                 <ul className="mt-6 space-y-2.5 text-sm text-zinc-600 dark:text-zinc-400">
                   {card.bullets.map((bullet) => (
                     <li key={bullet} className="flex items-start gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500/70" />
+                      <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${card.styles.bulletBg}`} />
                       <span>{bullet}</span>
                     </li>
                   ))}
@@ -592,7 +608,7 @@ function HomePage() {
                 <div className="mt-8">
                   <AppLink
                     href={card.href}
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white transition-colors hover:text-emerald-600 dark:hover:text-emerald-450 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2"
+                    className={`inline-flex items-center gap-2 text-sm font-semibold text-zinc-950 dark:text-white transition-colors ${card.styles.linkHover} focus:outline-none focus:ring-2 ${card.styles.ringFocus} focus:ring-offset-2`}
                   >
                     Open page <ArrowRight size={14} weight="bold" />
                   </AppLink>
@@ -773,11 +789,11 @@ function TaskAPage() {
             <ArrowRight size={16} weight="bold" className="transition group-hover:translate-x-1" />
           </MagneticButton>
           <AppLink
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300 transition-all hover:-translate-y-0.5 hover:border-zinc-300/70 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40 focus:ring-offset-2"
             href="/task-b"
           >
             See Task B
-            <ArrowRight size={14} weight="bold" className="text-emerald-600" />
+            <ArrowRight size={14} weight="bold" className="text-orange-600" />
           </AppLink>
         </div>
       </Section>
@@ -831,7 +847,7 @@ function TaskBPage() {
       footerMeta="Output: RecommendResponse with ranked recommendations"
     >
       <Section id="top" className="relative mx-auto max-w-7xl px-4 pb-24 pt-32 sm:px-6 lg:px-12 relative z-10">
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50/80 dark:bg-emerald-950/40 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-emerald-700 dark:text-emerald-450">
+        <div className="inline-flex items-center gap-2 rounded-full border border-orange-200/70 dark:border-orange-900/50 bg-orange-50/80 dark:bg-orange-950/40 px-3 py-1 text-[10px] uppercase tracking-[0.22em] text-orange-700 dark:text-orange-450">
           <PulseDot />
           POST /recommend
         </div>
@@ -849,7 +865,7 @@ function TaskBPage() {
         <div className="mt-8 flex flex-wrap gap-3">
           <MagneticButton
             type="button"
-            className="group inline-flex items-center gap-2 rounded-xl bg-zinc-950 dark:bg-zinc-50 px-6 py-3 text-sm font-semibold text-white dark:text-zinc-950 shadow-[0_10px_26px_-16px_rgba(9,9,11,0.6)] dark:shadow-[0_10px_26px_-16px_rgba(255,255,255,0.15)] transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2"
+            className="group inline-flex items-center gap-2 rounded-xl bg-zinc-950 dark:bg-zinc-50 px-6 py-3 text-sm font-semibold text-white dark:text-zinc-950 shadow-[0_10px_26px_-16px_rgba(9,9,11,0.6)] dark:shadow-[0_10px_26px_-16px_rgba(255,255,255,0.15)] transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:ring-offset-2"
             onClick={() => navigate("/")}
           >
             Back to home
