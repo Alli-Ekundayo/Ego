@@ -93,6 +93,13 @@ class Product:
     category: str
     url: str
     description: str
+    # ── Price metadata ────────────────────────────────────────────────────────
+    price_raw: str = ""          # e.g. "₦45,000"
+    price_value: float = 0.0     # numeric e.g. 45000.0
+    old_price_raw: str = ""      # original price before discount e.g. "₦60,000"
+    old_price_value: float = 0.0
+    discount_percent: float = 0.0
+    currency: str = "NGN"
     reviews: list[Review] = field(default_factory=list)
 
 
@@ -130,10 +137,73 @@ def has_next_page(soup: BeautifulSoup, current_page: int) -> bool:
     return False
 
 
+def _parse_price_text(raw: str) -> float:
+    """
+    Convert a Jumia price string to a float.
+    e.g. "₦45,000" → 45000.0  |  "45,000.50" → 45000.50
+    """
+    cleaned = re.sub(r"[^\d.]", "", raw.replace(",", ""))
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except ValueError:
+        return 0.0
+
+
+def _extract_card_price(card: BeautifulSoup) -> dict:
+    """
+    Pull price metadata from a Jumia listing card.
+
+    Jumia Nigeria 2024/2025 layout (confirmed selectors):
+      Current price : .prc                 e.g. "₦45,000"
+      Old price     : .slprc or .old       e.g. "₦60,000"
+      Discount badge: .bdg._dsct._sm      e.g. "-25%"
+    """
+    price_raw = ""
+    price_value = 0.0
+    old_price_raw = ""
+    old_price_value = 0.0
+    discount_percent = 0.0
+
+    # Current price — try multiple known selectors
+    for sel in (".prc", ".-p", "[data-price]", ".price"):
+        el = card.select_one(sel)
+        if el:
+            price_raw = el.get_text(strip=True)
+            price_value = _parse_price_text(price_raw)
+            break
+
+    # Old / slashed price
+    for sel in (".slprc", ".old", ".-slprc"):
+        el = card.select_one(sel)
+        if el:
+            old_price_raw = el.get_text(strip=True)
+            old_price_value = _parse_price_text(old_price_raw)
+            break
+
+    # Discount badge e.g. "-25%"
+    discount_el = card.select_one(".bdg._dsct, .bdg._dsct._sm, .-dsct")
+    if discount_el:
+        m = re.search(r"(\d+(?:\.\d+)?)", discount_el.get_text())
+        if m:
+            discount_percent = float(m.group(1))
+    elif old_price_value > 0 and price_value > 0:
+        discount_percent = round((old_price_value - price_value) / old_price_value * 100, 1)
+
+    return {
+        "price_raw": price_raw,
+        "price_value": price_value,
+        "old_price_raw": old_price_raw,
+        "old_price_value": old_price_value,
+        "discount_percent": discount_percent,
+        "currency": "NGN",
+    }
+
+
 def parse_listing(soup: BeautifulSoup, category_label: str) -> list[dict]:
     """
     Extract product cards from a single Jumia category listing page.
     Confirmed selector: article.prd  /  a.core  /  .name
+    Includes price metadata extracted from the card itself (no extra request).
     """
     products = []
     for card in soup.select("article.prd"):
@@ -146,12 +216,14 @@ def parse_listing(soup: BeautifulSoup, category_label: str) -> list[dict]:
         if not name:
             continue
         has_stars = card.select_one(".stars") is not None
+        price_meta = _extract_card_price(card)
         products.append(
             {
                 "name": name,
                 "url": url,
                 "category": category_label,
                 "has_stars": has_stars,
+                **price_meta,
             }
         )
     return products
@@ -324,14 +396,18 @@ def scrape_product(
     product_url: str,
     session: requests.Session,
     max_review_pages: int = 10,
-) -> tuple[list[Review], str]:
+    listing_price: dict | None = None,
+) -> tuple[list[Review], str, dict]:
     """
-    Fetch a product page, extract the SKU, then paginate through all review pages.
-    Returns (reviews, description).
+    Fetch a product page, extract the SKU, description, and price metadata.
+    Falls back to listing_price (from the card) if the product page price is
+    not found or is zero.
+
+    Returns (reviews, description, price_meta).
     """
     soup = _get(session, product_url)
     if not soup:
-        return [], ""
+        return [], "", listing_price or {}
 
     desc_el = (
         soup.select_one(".markup.-pvl")
@@ -340,18 +416,80 @@ def scrape_product(
     )
     description = desc_el.get_text(" ", strip=True)[:1000] if desc_el else ""
 
+    # ── Price from product page (more reliable than listing card) ─────────
+    # Jumia product page selectors (2024/2025):
+    #   .-prc-bx  → price container  (e.g. ₦45,000)
+    #   .-prc     → current price text
+    #   .-prc-bx .-slprc → old/crossed-out price
+    page_price_raw = ""
+    page_price_value = 0.0
+    page_old_raw = ""
+    page_old_value = 0.0
+    page_discount = 0.0
+
+    # 1. Try class-based selectors for both desktop/mobile (current layout)
+    price_el = soup.find(class_=lambda c: c and "-ubpt" in c and "-b" in c)
+    if price_el:
+        page_price_raw = price_el.get_text(strip=True)
+        page_price_value = _parse_price_text(page_price_raw)
+
+    if page_price_value == 0:
+        # Fallback to existing selectors
+        for sel in (".-prc", ".price.-prc", ".prc", ".-prc-bx span", "[data-price]"):
+            el = soup.select_one(sel)
+            if el:
+                # Skip empty divs/containers
+                txt = el.get_text(strip=True)
+                val = _parse_price_text(txt)
+                if val > 0:
+                    page_price_raw = txt
+                    page_price_value = val
+                    break
+
+    # Old price
+    old_price_el = soup.find(class_=lambda c: c and "-ubpt" in c and "-lthr" in c)
+    if old_price_el:
+        page_old_raw = old_price_el.get_text(strip=True)
+        page_old_value = _parse_price_text(page_old_raw)
+    else:
+        slp = soup.select_one(".-slprc, .slprc")
+        if slp:
+            page_old_raw = slp.get_text(strip=True)
+            page_old_value = _parse_price_text(page_old_raw)
+
+    # Discount badge
+    dsct = soup.find(class_=lambda c: c and ("-dsct" in c or "_dsct" in c))
+    if dsct:
+        m = re.search(r"(\d+(?:\.\d+)?)", dsct.get_text())
+        if m:
+            page_discount = float(m.group(1))
+    elif page_old_value > 0 and page_price_value > 0:
+        page_discount = round((page_old_value - page_price_value) / page_old_value * 100, 1)
+
+    # Prefer product-page price when non-zero, fall back to listing card
+    base = listing_price or {}
+    price_meta: dict = {
+        "price_raw": page_price_raw or base.get("price_raw", ""),
+        "price_value": page_price_value or base.get("price_value", 0.0),
+        "old_price_raw": page_old_raw or base.get("old_price_raw", ""),
+        "old_price_value": page_old_value or base.get("old_price_value", 0.0),
+        "discount_percent": page_discount or base.get("discount_percent", 0.0),
+        "currency": "NGN",
+    }
+
+    # ── SKU → reviews ─────────────────────────────────────────────────────
     sku = extract_sku(soup.get_text())
     if not sku:
         sku = extract_sku(str(soup))
 
     if not sku:
         log.debug("No SKU found for %s", product_url)
-        return [], description
+        return [], description, price_meta
 
     reviews_base = f"{BASE_URL}/catalog/productratingsreviews/sku/{sku}/"
     log.info("    → Reviews: %s", reviews_base)
     reviews = paginate_reviews(session, reviews_base, max_review_pages)
-    return reviews, description
+    return reviews, description, price_meta
 
 
 def main() -> None:
@@ -431,8 +569,22 @@ def main() -> None:
                 continue
 
             log.info("  ↳ %s", item["name"])
-            reviews, desc = scrape_product(
-                item["url"], session, max_review_pages=args.review_pages
+
+            # Pass listing-card price as fallback; product page will override if richer
+            listing_price = {
+                "price_raw": item.get("price_raw", ""),
+                "price_value": item.get("price_value", 0.0),
+                "old_price_raw": item.get("old_price_raw", ""),
+                "old_price_value": item.get("old_price_value", 0.0),
+                "discount_percent": item.get("discount_percent", 0.0),
+                "currency": "NGN",
+            }
+
+            reviews, desc, price_meta = scrape_product(
+                item["url"],
+                session,
+                max_review_pages=args.review_pages,
+                listing_price=listing_price,
             )
 
             if not reviews:
@@ -441,9 +593,9 @@ def main() -> None:
                 continue
 
             log.info(
-                "    ✓ %d review(s) across %d page(s)",
+                "    ✓ %d review(s) | price=%s",
                 len(reviews),
-                min(args.review_pages, (len(reviews) // 10) + 1),
+                price_meta.get("price_raw") or "N/A",
             )
 
             product = Product(
@@ -452,6 +604,12 @@ def main() -> None:
                 category=item["category"],
                 url=item["url"],
                 description=desc,
+                price_raw=price_meta.get("price_raw", ""),
+                price_value=price_meta.get("price_value", 0.0),
+                old_price_raw=price_meta.get("old_price_raw", ""),
+                old_price_value=price_meta.get("old_price_value", 0.0),
+                discount_percent=price_meta.get("discount_percent", 0.0),
+                currency="NGN",
                 reviews=reviews,
             )
             all_products.append(asdict(product))
@@ -481,6 +639,18 @@ def main() -> None:
         enriched_desc = " ".join(
             filter(None, [p.get("description", ""), reviews_blob])
         ).strip()
+
+        # Compute rating stats from scraped reviews
+        ratings = [r["rating"] for r in p["reviews"] if r.get("rating")]
+        rating_stats: dict = {}
+        if ratings:
+            rating_stats = {
+                "mean": round(sum(ratings) / len(ratings), 2),
+                "count": len(ratings),
+                "min": min(ratings),
+                "max": max(ratings),
+            }
+
         pipeline_items.append(
             {
                 "id": p["id"],
@@ -489,6 +659,15 @@ def main() -> None:
                 "description": enriched_desc or p["name"],
                 "url": p["url"],
                 "sample_reviews": review_bodies[:8],
+                "review_count": len(p["reviews"]),
+                "rating_stats": rating_stats,
+                # ── Price metadata ────────────────────────────────────────
+                "price_raw": p.get("price_raw", ""),
+                "price_value": p.get("price_value", 0.0),
+                "old_price_raw": p.get("old_price_raw", ""),
+                "old_price_value": p.get("old_price_value", 0.0),
+                "discount_percent": p.get("discount_percent", 0.0),
+                "currency": p.get("currency", "NGN"),
             }
         )
 

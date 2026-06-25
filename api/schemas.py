@@ -30,6 +30,14 @@ class Recommendation(BaseModel):
     item_id: str
     name: str
     reason: str
+    # ── Price metadata (populated after enrich_prices.py run) ─────────────
+    price_raw: str = ""
+    price_value: float = 0.0
+    old_price_raw: str = ""
+    old_price_value: float = 0.0
+    discount_percent: float = 0.0
+    currency: str = "NGN"
+    rating_stats: dict = Field(default_factory=dict)
 
 
 class RecommendResponse(BaseModel):
@@ -56,6 +64,14 @@ class ProductSummary(BaseModel):
     description: str | None = None
     mean_rating: float
     review_count: int
+    # ── Price metadata (populated after enrich_prices.py run) ─────────────
+    price_raw: str = ""
+    price_value: float = 0.0
+    old_price_raw: str = ""
+    old_price_value: float = 0.0
+    discount_percent: float = 0.0
+    currency: str = "NGN"
+    rating_stats: dict = Field(default_factory=dict)
 
 
 class PaginatedUsers(BaseModel):
@@ -70,3 +86,51 @@ class PaginatedProducts(BaseModel):
     page: int
     page_size: int
     items: list[ProductSummary]
+
+
+# ---------------------------------------------------------------------------
+# Memory Agent (Track 1 — MemoryAgent)
+# ---------------------------------------------------------------------------
+
+
+class MemoryEvent(BaseModel):
+    """A single interaction event to persist in the MemoryStore."""
+    type: str = "interaction"   # "preference" | "interaction" | "feedback" | "context"
+    content: str
+    importance: float = 0.5     # initial salience in [0, 1]
+    metadata: dict = Field(default_factory=dict)
+
+
+class MemoryIngestRequest(BaseModel):
+    user_id: str
+    session_id: str = ""
+    events: list[MemoryEvent]
+    run_consolidation: bool = True  # if True, run full Qwen consolidation pass
+
+
+class MemoryRecallRequest(BaseModel):
+    user_id: str
+    query: str
+    max_results: int = 10
+    max_tokens: int = 600
+
+
+class RecalledMemory(BaseModel):
+    content: str
+    type: str
+    score: float
+
+
+class MemoryRecallResponse(BaseModel):
+    user_id: str
+    summary: str
+    preferences: dict
+    recent_memories: list[RecalledMemory]
+
+
+class MemorySnapshotResponse(BaseModel):
+    user_id: str
+    memory_count: int
+    preferences: dict
+    summary: str
+

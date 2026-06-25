@@ -17,7 +17,11 @@ Run:
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
+
+# Add project root to sys.path so we can import 'core'
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.embeddings import embedding_model
 from core.utils import to_vector_id as _to_vector_id
@@ -28,7 +32,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-ITEMS_PATH = Path(__file__).parent.parent / "data" / "items.json"
+DATA_DIR = Path(__file__).parent.parent / "data"
 DEFAULT_COLLECTION = "user_profiles"
 VECTOR_SIZE = 384
 BATCH_SIZE = 8
@@ -50,13 +54,21 @@ def build_text(item: dict) -> str:
     return " ".join(filter(None, parts)).strip()
 
 
-def build_index(collection_name: str = DEFAULT_COLLECTION) -> None:
-    if not ITEMS_PATH.exists():
+def build_index(collection_name: str = DEFAULT_COLLECTION, items_path: Path | None = None) -> None:
+    if items_path is None:
+        if collection_name == "user_profiles":
+            path_to_load = DATA_DIR / "user_items.json"
+        else:
+            path_to_load = DATA_DIR / "items.json"
+    else:
+        path_to_load = items_path
+
+    if not path_to_load.exists():
         raise FileNotFoundError(
-            f"{ITEMS_PATH} not found. Run 'python scripts/build_user_profiles.py' first."
+            f"{path_to_load} not found. Run 'python scripts/build_user_profiles.py' first."
         )
 
-    with open(ITEMS_PATH, encoding="utf-8") as f:
+    with open(path_to_load, encoding="utf-8") as f:
         items: list[dict] = json.load(f)
 
     if not items:
@@ -103,5 +115,11 @@ if __name__ == "__main__":
         default=DEFAULT_COLLECTION,
         help=f"Turbovec collection name (default: {DEFAULT_COLLECTION})",
     )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=None,
+        help="Path to the JSON file to index (default: data/items.json)",
+    )
     args = parser.parse_args()
-    build_index(collection_name=args.collection)
+    build_index(collection_name=args.collection, items_path=args.input)

@@ -421,13 +421,36 @@ def retrieve_candidates(
         if not sparse_keywords:
             sparse_keywords = None
 
-    return retrieval_agent.retrieve(
+    candidates = retrieval_agent.retrieve(
         query_vector=base_vector,
         user_id=getattr(profile, "user_id", None),
         n=100,
         domain_filter=domain_filter,
         sparse_keywords=sparse_keywords,
     )
+
+    from core.products import load_products_by_id
+    products = load_products_by_id()
+    enriched = []
+    for cand in candidates:
+        pid = str(cand.get("item_id", "")).strip()
+        product_info = products.get(pid)
+        if product_info:
+            cand_copy = dict(cand)
+            cand_copy.update({
+                "price_raw": product_info.get("price_raw", ""),
+                "price_value": float(product_info.get("price_value", 0.0)),
+                "old_price_raw": product_info.get("old_price_raw", ""),
+                "old_price_value": float(product_info.get("old_price_value", 0.0)),
+                "discount_percent": float(product_info.get("discount_percent", 0.0)),
+                "currency": product_info.get("currency", "NGN"),
+                "rating_stats": product_info.get("rating_stats") or {},
+                "description": product_info.get("description", ""),
+            })
+            enriched.append(cand_copy)
+        else:
+            enriched.append(cand)
+    return enriched
 
 
 def build_cold_start_proxy_embedding(

@@ -90,6 +90,6 @@ def get_llm(
         model=model,
         temperature=temperature,
         google_api_key=api_key,
-        timeout=120,
-        max_retries=5,
+        timeout=15,
+        max_retries=1,
     )

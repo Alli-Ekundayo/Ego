@@ -39,6 +39,9 @@ services:
       - LLM_MODEL=${LLM_MODEL:-gemini-flash-latest}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - HF_HOME=/app/scratch/cache/huggingface
+      # ── Alibaba Cloud / Qwen (DashScope) ──────────────────────────────────
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
     volumes:
       - .:/app
       - llm_cache:/app/scratch/cache
@@ -51,6 +54,7 @@ services:
       start_period: 150s
     networks:
       - ego-network
+
 
   indexer:
     build:

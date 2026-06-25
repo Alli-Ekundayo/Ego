@@ -6,6 +6,7 @@ langgraph
 langchain
 langchain-google-genai
 langchain-community
+langchain-openai
 sqlalchemy
 turbovec
 sentence-transformers
@@ -15,8 +16,10 @@ numpy
 rouge-score
 bert-score
 tenacity
+openai
 
 python-dotenv
 requests
 beautifulsoup4
 diskcache
+dashscope

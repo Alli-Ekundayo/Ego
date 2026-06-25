@@ -33,6 +33,7 @@ from core.aspect_extractor import (
     extract_sparse_keywords,
 )
 from core.config import settings
+from core.embeddings import embedding_model
 from core.llm import get_llm
 from core.profiles import profiles_grouped_by_uid
 from core.user_profile import UserProfile, build_profile, profile_from_payload
@@ -470,22 +471,40 @@ def multiturn_node(state: TaskBState) -> dict:
         return {"refined_context_text": refined_context}
 
     # ------------------------------------------------------------------
-    # Apply rating-tier proxy filter for budget/premium intent.
-    # items.json has no price field, so rating_stats.mean is used as a
-    # weak proxy: budget shoppers often prefer widely-reviewed mid-range
-    # items; premium shoppers gravitate toward highly-rated ones.
+    # Apply price-based filtering for budget/premium intent.
+    # We now have real price metadata (price_value) in items.json!
+    # If the candidates have valid price_value, we use it. Otherwise,
+    # we fall back to rating_stats.mean as a proxy.
     # ------------------------------------------------------------------
-    if intent["budget_mode"]:
-        # Keep items with mid-range rating (3.0-4.3) — "reliable but not overpriced"
-        filtered = [c for c in refined_candidates if 3.0 <= float((c.get("rating_stats") or {}).get("mean", 3.5)) <= 4.3]
-        if len(filtered) >= 3:
-            refined_candidates = filtered
-            log.info("  ↳ Budget filter applied: %d candidates retained", len(refined_candidates))
-    elif intent["premium_mode"]:
-        filtered = [c for c in refined_candidates if float((c.get("rating_stats") or {}).get("mean", 3.5)) >= 4.0]
-        if len(filtered) >= 3:
-            refined_candidates = filtered
-            log.info("  ↳ Premium filter applied: %d candidates retained", len(refined_candidates))
+    priced_candidates = [c for c in refined_candidates if float(c.get("price_value") or 0.0) > 0.0]
+    
+    if priced_candidates:
+        prices = [float(c["price_value"]) for c in priced_candidates]
+        median_price = sorted(prices)[len(prices) // 2]
+        if intent["budget_mode"]:
+            # Keep items cheaper than or equal to the median price of available candidates
+            filtered = [c for c in refined_candidates if float(c.get("price_value") or 999999.0) <= median_price]
+            if len(filtered) >= 3:
+                refined_candidates = filtered
+                log.info("  ↳ Budget price filter applied (threshold <= ₦%s): %d candidates retained", median_price, len(refined_candidates))
+        elif intent["premium_mode"]:
+            # Keep items more expensive than or equal to the median price of available candidates
+            filtered = [c for c in refined_candidates if float(c.get("price_value") or 0.0) >= median_price]
+            if len(filtered) >= 3:
+                refined_candidates = filtered
+                log.info("  ↳ Premium price filter applied (threshold >= ₦%s): %d candidates retained", median_price, len(refined_candidates))
+    else:
+        # Fallback to rating stats proxy if no price data is populated yet
+        if intent["budget_mode"]:
+            filtered = [c for c in refined_candidates if 3.0 <= float((c.get("rating_stats") or {}).get("mean", 3.5)) <= 4.3]
+            if len(filtered) >= 3:
+                refined_candidates = filtered
+                log.info("  ↳ Budget proxy filter applied: %d candidates retained", len(refined_candidates))
+        elif intent["premium_mode"]:
+            filtered = [c for c in refined_candidates if float((c.get("rating_stats") or {}).get("mean", 3.5)) >= 4.0]
+            if len(filtered) >= 3:
+                refined_candidates = filtered
+                log.info("  ↳ Premium proxy filter applied: %d candidates retained", len(refined_candidates))
 
     refined_ranked = rerank_candidates(
         profile=blended_profile,

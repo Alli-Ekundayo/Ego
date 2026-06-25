@@ -60,7 +60,7 @@ ITEMS_PATH = DATA_DIR / "items.json"
 
 KAGGLE_EXPECTED_FILES = [
     "jumia_reviews.json",
-    "items.json",
+    "user_items.json",
     "user_profiles.json",
 ]
 
@@ -129,8 +129,9 @@ def download_data(force: bool = False) -> None:
             log.info("  ✓ %s already exists.", filename)
             continue
 
-        file_url = f"{base_url.rstrip('/')}/{filename}"
-        log.info("Downloading %s → %s ...", filename, target_path)
+        remote_name = "items.json" if filename == "user_items.json" else filename
+        file_url = f"{base_url.rstrip('/')}/{remote_name}"
+        log.info("Downloading %s → %s ...", remote_name, target_path)
         try:
             urllib.request.urlretrieve(file_url, target_path)
         except urllib.error.URLError as e:
@@ -141,7 +142,7 @@ def download_data(force: bool = False) -> None:
 
 
 def _convert_raw_to_items(raw: list[dict]) -> list[dict]:
-    """Convert full raw scraped records → pipeline-ready items."""
+    """Convert full raw scraped records → pipeline-ready items with price metadata."""
     items = []
     for p in raw:
         review_texts = [r["body"] for r in p.get("reviews", []) if r.get("body")]
@@ -149,16 +150,52 @@ def _convert_raw_to_items(raw: list[dict]) -> list[dict]:
         enriched = " ".join(
             filter(None, [p.get("description", ""), reviews_blob])
         ).strip()
+
+        # Compute rating stats from scraped reviews if not already present
+        ratings = [r["rating"] for r in p.get("reviews", []) if r.get("rating")]
+        rating_stats = p.get("rating_stats") or {}
+        if not rating_stats and ratings:
+            rating_stats = {
+                "mean": round(sum(ratings) / len(ratings), 2),
+                "count": len(ratings),
+                "min": min(ratings),
+                "max": max(ratings),
+            }
+
+        price_raw = p.get("price_raw", p.get("price", "") if isinstance(p.get("price"), str) else "")
+        price_value = float(p.get("price_value", 0.0))
+        old_price_raw = p.get("old_price_raw", "")
+        old_price_value = float(p.get("old_price_value", 0.0))
+        discount_percent = float(p.get("discount_percent", 0.0))
+
+        if not price_value or price_value <= 0:
+            try:
+                from scripts.seed_prices import generate_price_fields
+                seeded = generate_price_fields(p["id"], p["name"], p["category"])
+                price_raw = seeded["price_raw"]
+                price_value = seeded["price_value"]
+                old_price_raw = seeded["old_price_raw"]
+                old_price_value = seeded["old_price_value"]
+                discount_percent = seeded["discount_percent"]
+            except Exception as e:
+                log.warning("Failed to auto-seed price fields for item %s: %s", p.get("id"), e)
+
         items.append(
             {
                 "id": p["id"],
                 "name": p["name"],
                 "category": p["category"],
                 "description": enriched or p["name"],
-                "price": p.get("price", "N/A"),
-                "rating": p.get("rating", 0.0),
-                "reviews_count": p.get("reviews_count", 0),
                 "sample_reviews": review_texts[:5],
+                "review_count": p.get("review_count", len(p.get("reviews", []))),
+                "rating_stats": rating_stats,
+                # ── Price metadata ────────────────────────────────────────
+                "price_raw": price_raw,
+                "price_value": price_value,
+                "old_price_raw": old_price_raw,
+                "old_price_value": old_price_value,
+                "discount_percent": discount_percent,
+                "currency": p.get("currency", "NGN"),
             }
         )
     ITEMS_PATH.parent.mkdir(parents=True, exist_ok=True)

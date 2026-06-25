@@ -1,68 +1,154 @@
-# Ego — Nigerian-Centric Recommendation System
+# Ego — MemoryAgent for Nigerian E-Commerce
 
-> An agentic recommendation engine grounded in authentic Nigerian e-commerce language, built on LangGraph, Turbovec, and Google Gemini.
+> **Global AI Hackathon with Qwen Cloud · Track 1: MemoryAgent**
+>
+> An agentic recommendation engine with persistent cross-session memory, powered by **Qwen Cloud (Alibaba Cloud DashScope)** and LangGraph.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-agentic-green)](https://github.com/langchain-ai/langgraph)
 
 ---
 
 ## Overview
 
-**Ego** is a dual-task recommendation system designed for the Nigerian e-commerce context. It combines a user modelling pipeline (Task A) with a contextual recommendation pipeline (Task B), fusing dense semantic search, sparse BM25 keyword search, collaborative filtering, cross-encoder reranking, and LLM personalisation into a single coherent agentic workflow.
+**Ego** is a dual-task recommendation system for Nigerian e-commerce that now features a **MemoryAgent** — a persistent, cross-session memory layer that:
 
-The system is grounded in real Jumia product reviews scraped from the Nigerian market, giving the language models authentic vocabulary, slang, and cultural tone to draw on when generating reviews and recommendations.
+- **Autonomously accumulates experience** from every user interaction
+- **Remembers user preferences** across sessions using Ebbinghaus-style decay weighting
+- **Makes increasingly accurate decisions** by injecting recalled memories into each new recommendation pass
+- **Forgets outdated information** via time-based importance decay and proactive pruning
+- **Fits critical memories into limited context windows** via token-budget-aware ranked recall
+
+The system is grounded in real Jumia product reviews scraped from the Nigerian market, and uses **Qwen Cloud (DashScope)** as the primary LLM for memory consolidation, with Google Gemini as a transparent fallback.
 
 ---
 
 ## Architecture
 
+![Ego MemoryAgent Architecture](docs/architecture.png)
+
+### System components
+
 ```
-                        ┌──────────────────────────────────────┐
-                        │             FastAPI (Port 8000)       │
-                        │  POST /simulate-review  POST /recommend│
-                        └──────────┬───────────────────┬────────┘
-                                   │                   │
-                          Task A Graph           Task B Graph
-                        (User Modelling)    (Recommendation)
-                               │                   │
-               ┌───────────────▼───┐   ┌───────────▼──────────────────┐
-               │ profile_retrieval │   │ load_profile_node            │
-               │ rating_prediction │   │ context_extraction_node      │
-               │ style_analysis    │   │ aspect_extraction_node       │
-               │ review_generation │   │ cold_start_node (if needed)  │
-               └───────────────────┘   │ hybrid_retrieval_node        │
-                                       │   ├─ Dense ANN (Turbovec)    │
-                                       │   ├─ Collaborative Filtering  │
-                                       │   └─ Sparse BM25 (RRF fusion) │
-                                       │ reranking_node               │
-                                       │   ├─ Blended local scorer    │
-                                       │   └─ LLM reason generation   │
-                                       │ multiturn_node               │
-                                       └──────────────────────────────┘
+                    ┌─────────────────────────────────────────────────────┐
+                    │             FastAPI Gateway (Alibaba Cloud ECS)      │
+                    │  /recommend  /simulate-review                        │
+                    │  /memory/ingest  /memory/recall  /memory/snapshot   │
+                    └──────┬─────────────────┬──────────────┬─────────────┘
+                           │                 │              │ async fire-and-forget
+                    Task B Graph      Task A Graph    MemoryAgent Graph
+                    (Recommend)      (User Model)    (Persistent Memory)
+                           │                 │              │
+              ┌────────────┘      ┌──────────┘    ┌─────────┘
+              ▼                   ▼               ▼
+         Turbovec           Turbovec +       Memory SQLite DB
+         Vector Store       Naija Examples   (cross-session)
+              │                   │               │
+              └────────────┬──────┘      Qwen Cloud (DashScope)
+                           │             consolidation LLM
+                     BM25 Corpus
 ```
 
-### Task A — User Modelling
+### MemoryAgent Graph (Track 1 focus)
 
-Simulates how a given user would rate and review a product.
+```
+ingest_node
+    │   Persists new interaction events to SQLite
+    ▼
+consolidate_node
+    │   Qwen-powered: merges duplicates, promotes preferences,
+    │   writes a rolling long-term summary (≤300 words)
+    ▼
+prune_node
+    │   Ebbinghaus decay prune + hard-cap eviction
+    ▼
+  END
+```
+
+### Task B — Recommendation Graph
 
 | Node | Purpose |
 |---|---|
-| `profile_retrieval_node` | Load the user's historical reviews from Turbovec; compute per-aspect exemplars via embedding cosine |
-| `rating_prediction_node` | Predict a 1–5 star rating using persona similarity |
-| `style_analysis_node` | Derive a writing-style profile from review statistics (length, TTR, tone) — no LLM call |
-| `review_generation_node` | Generate a review with authentic Naija voice in a single LLM call (RAG over past reviews + Jumia examples) |
+| `load_profile_node` | Load user profile; detect cold-start |
+| `context_extraction_node` | Parse request into structured signals (Qwen/Gemini) |
+| `aspect_extraction_node` | Extract product aspects + BM25 keywords |
+| `cold_start_node` | Proxy embedding from nearest user cluster |
+| `hybrid_retrieval_node` | Dense ANN + CF + BM25 fused via RRF |
+| `reranking_node` | Blended local scorer → Qwen/Gemini reason generation |
+| `multiturn_node` | Conversational refinement + blended re-retrieval |
 
-### Task B — Contextual Recommendation
-
-Returns ranked product recommendations for a user given a conversational context.
+### Task A — User Modelling Graph
 
 | Node | Purpose |
 |---|---|
-| `load_profile_node` | Load the user profile; detect cold-start |
-| `context_extraction_node` | Parse the user's request into structured signals (preferences, domain, mood) |
-| `aspect_extraction_node` | Extract product aspects and generate BM25 keyword tokens |
-| `cold_start_node` | Build a proxy embedding from the nearest user cluster (new users only) |
-| `hybrid_retrieval_node` | Dense ANN + Collaborative Filtering + BM25, fused via Reciprocal Rank Fusion |
-| `reranking_node` | Blended local scorer (CE + aspect cosine + category preference + retrieval) → LLM reason generation |
-| `multiturn_node` | Conversational refinement: re-retrieves on detected preference shifts |
+| `profile_retrieval_node` | Load history; rank per-aspect exemplars via cosine |
+| `rating_prediction_node` | Similarity-weighted rating prediction |
+| `style_analysis_node` | Statistical style profile (no LLM) |
+| `review_generation_node` | Single Qwen/Gemini call: review + Naija voice fused |
+
+---
+
+## MemoryAgent Design
+
+### Memory Storage
+
+Every interaction writes to a SQLite database at `scratch/cache/memory.db`:
+
+| Field | Description |
+|---|---|
+| `content` | The memory text |
+| `memory_type` | `preference` \| `interaction` \| `feedback` \| `context` |
+| `importance` | Float `[0, 1]` — initial salience, boosted on recall |
+| `access_count` | Times recalled — increases decay resistance |
+| `created_at` | ISO timestamp |
+| `last_accessed` | ISO timestamp — drives decay calculation |
+| `session_id` | Origin session for provenance |
+
+### Forgetting Curve
+
+Importance decays exponentially using an Ebbinghaus-inspired formula countered by access frequency:
+
+```
+R(t) = importance × exp(-(t / half_life) / sqrt(1 + access_count))
+```
+
+- `half_life = 7 days` — a memory at importance 0.5 that is never recalled will drop below the `0.05` prune threshold in ~37 days
+- Each recall boosts `importance` by `+0.08` and resets the clock
+- Hard cap of **200 memories per user** with lowest-importance eviction
+
+### Context-Window-Aware Recall
+
+`MemoryStore.recall()` accepts a `max_tokens` budget and returns the highest-scoring memories that fit:
+
+```python
+from core.memory import MemoryStore
+
+store = MemoryStore("user_042")
+memories = store.recall(query="wireless earbuds for gym", max_results=10, max_tokens=600)
+```
+
+Ranking uses `effective_importance × (1 + 0.5 × keyword_overlap)` so both recency-weighted importance and query relevance drive selection.
+
+### Qwen Consolidation (Alibaba Cloud)
+
+The `consolidate_node` uses **Qwen Plus** (via DashScope OpenAI-compatible endpoint) to:
+
+1. Read up to 80 most important memories
+2. Write a 300-word long-term user summary
+3. Extract named preference key-value pairs (`budget`, `top_category`, etc.)
+4. Store both in `memory_summaries` and `user_preferences` tables
+
+```python
+# agents/memory_agent.py — _get_qwen_llm()
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    model="qwen-plus",
+    api_key=DASHSCOPE_API_KEY,
+    base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+)
+```
 
 ---
 
@@ -71,63 +157,59 @@ Returns ranked product recommendations for a user given a conversational context
 | Component | Technology |
 |---|---|
 | Agent framework | [LangGraph](https://github.com/langchain-ai/langgraph) |
-| LLM | Google Gemini (`gemini-flash-latest` by default, configurable) |
-| Embeddings | `all-MiniLM-L6-v2` via [SentenceTransformers](https://www.sbert.net/) |
+| Primary LLM | **Qwen Plus** (Alibaba Cloud DashScope) |
+| Fallback LLM | Google Gemini (`gemini-flash-latest`) |
+| Embeddings | `all-MiniLM-L6-v2` via SentenceTransformers |
 | Vector store | [Turbovec](https://pypi.org/project/turbovec/) |
+| Memory store | SQLite (`scratch/cache/memory.db`) |
 | Sparse retrieval | BM25 via `rank-bm25` |
 | Cross-encoder | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| API | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn |
+| API | FastAPI + Uvicorn |
 | LLM response cache | SQLite (`langchain_community.cache.SQLiteCache`) |
 | Embedding cache | `diskcache` (persistent, disk-backed) |
-| Python | 3.10+ |
+| Cloud | **Alibaba Cloud ECS + Container Registry** |
 
 ---
 
-## Project Structure
+## Alibaba Cloud Deployment
+
+### Proof of Deployment
+
+See [`alibaba_cloud_proof.py`](alibaba_cloud_proof.py) — a runnable script that:
+
+1. Connects to the DashScope OpenAI-compatible endpoint
+2. Invokes the `qwen-plus` model
+3. Prints a verified response confirming Alibaba Cloud connectivity
+
+```bash
+export DASHSCOPE_API_KEY=sk-...
+python alibaba_cloud_proof.py
+```
+
+Expected output:
+```
+=== Ego — Alibaba Cloud / Qwen Proof of Deployment ===
+  Connecting to DashScope: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+  Model: qwen-plus
+✓ DashScope API reachable
+✓ Qwen model: qwen-plus
+✓ Response: I am Qwen, running on Alibaba Cloud.
+```
+
+### Deployment topology
 
 ```
-Ego/
-├── api/
-│   ├── main.py              # FastAPI app, startup preloading, route handlers
-│   └── schemas.py           # Pydantic request/response models
-│
-├── agents/
-│   ├── rerank_agent.py      # Blended local scorer + LLM reason generation
-│   └── retrieval_agent.py   # Hybrid retrieval: Dense ANN + CF + BM25 (RRF)
-│
-├── core/
-│   ├── aspect_extractor.py  # Rule-based aspect extraction + sparse keyword tokens
-│   ├── config.py            # Pydantic settings (reads .env)
-│   ├── cross_encoder.py     # Cross-encoder + aspect alignment + category preference scoring
-│   ├── embeddings.py        # SentenceTransformer wrapper with diskcache
-│   ├── hybrid_search.py     # BM25 corpus builder + Reciprocal Rank Fusion
-│   ├── llm.py               # Gemini singleton with SQLite response caching
-│   ├── math_utils.py        # Cosine similarity, dot product
-│   ├── profiles.py          # Shared profile store (single JSON load, mtime-invalidated)
-│   ├── user_profile.py      # UserProfile dataclass + builder
-│   ├── utils.py             # tokenize, normalise_category, to_vector_id, clean_review_text
-│   └── vector_store.py      # Turbovec client wrapper (search, upsert)
-│
-├── graphs/
-│   ├── task_a.py            # LangGraph pipeline: User Modelling
-│   └── task_b.py            # LangGraph pipeline: Recommendation
-│
-├── scripts/
-│   ├── ingest.py            # Data pipeline: download → parse → build profiles
-│   ├── build_index.py       # Embed items.json and index into Turbovec
-│   ├── build_user_profiles.py # Aggregate reviews into per-user profile JSON
-│   ├── scrape_jumia.py      # Jumia review scraper (source of Naija training data)
-│   ├── seed_naija_examples.py # Index Jumia reviews into naija_style_examples collection
-│   ├── evaluate.py          # End-to-end eval harness (ROUGE, BERTScore, RMSE, NDCG)
-│   └── run_ablations.py     # Ablation study runner (no-BM25, no-cross-encoder variants)
-│
-├── tests/                   # Pytest test suite
-├── data/                    # user_profiles.json, items.json, jumia_reviews.json
-├── scratch/cache/           # SQLite LLM cache + diskcache embedding store
-├── Dockerfile               # Multi-stage build (builder → runtime, non-root user)
-├── docker-compose.yml       # Services: frontend, api, indexer (tools profile)
-├── Makefile                 # Developer workflow shortcuts
-└── requirements.txt         # Pinned Python dependencies
+Alibaba Cloud ECS
+  └─ Docker Compose / ACK
+       ├─ ego-api  (FastAPI + MemoryAgent)
+       └─ ego-frontend  (React/Vite)
+
+Alibaba Cloud Container Registry (ACR)
+  └─ registry.cn-shanghai.aliyuncs.com/ego/ego-api:latest
+
+DashScope (Alibaba Cloud AI)
+  └─ qwen-plus (memory consolidation)
+  └─ qwen-max  (optional upgrade)
 ```
 
 ---
@@ -137,7 +219,8 @@ Ego/
 ### Prerequisites
 
 - Docker and Docker Compose
-- A [Google AI Studio](https://aistudio.google.com/) API key
+- A [DashScope API key](https://dashscope.aliyuncs.com/) (Qwen Cloud / Alibaba Cloud)
+- A Google AI Studio API key (optional fallback)
 
 ### 1. Configure environment
 
@@ -145,39 +228,34 @@ Ego/
 cp .env.example .env
 ```
 
-Edit `.env` and set your API key:
+Edit `.env`:
 
 ```dotenv
+# Alibaba Cloud / Qwen Cloud (primary LLM for MemoryAgent consolidation)
+DASHSCOPE_API_KEY=sk-your-dashscope-key
+QWEN_MODEL=qwen-plus                    # or qwen-max, qwen-turbo
+
+# Google Gemini (fallback — used if DASHSCOPE_API_KEY is not set)
 GOOGLE_API_KEY=your_google_api_key_here
-LLM_MODEL=gemini-flash-latest          # or any Gemini model you have access to
+LLM_MODEL=gemini-flash-latest
+
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 DATASET_BASE_URL=https://huggingface.co/datasets/DreamerX/Ego-Jumia-Review/resolve/main
 ```
 
-### 2. Build and start services
+### 2. Build and start
 
 ```bash
 make up
 ```
 
-This starts three containers:
-
-| Container | Port | Purpose |
-|---|---|---|
-| `ego-api` | `8000` | FastAPI recommendation API |
-| `ego-frontend` | `3000` | Static evaluation dashboard |
-
 ### 3. Run the data pipeline
-
-The indexer downloads the dataset, builds user profiles, and seeds Turbovec:
 
 ```bash
 make index
 ```
 
-> **Note:** This only needs to run once. Data is persisted in `./data/`. Use `make reindex` to force a full rebuild.
-
-### 4. Verify the API
+### 4. Verify
 
 ```bash
 curl http://localhost:8000/health
@@ -188,42 +266,14 @@ curl http://localhost:8000/health
 
 ## API Reference
 
-### `POST /simulate-review`
+### `POST /api/recommend`
 
-Simulates how a specific user would rate and review a product.
+Returns personalised product recommendations. Automatically persists the interaction to the MemoryAgent (async, non-blocking).
 
-**Request:**
 ```json
 {
   "user_id": "user_042",
-  "item": {
-    "name": "Infinix Hot 40 Pro",
-    "category": "Smartphones",
-    "description": "6.78-inch display, 108MP camera, 5000mAh battery"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "rating": 4.2,
-  "review": "This phone is quite solid for the price. Battery lasts all day, camera sharp well well.",
-  "naija_review": "Chai, this phone don cast o! Battery life strong well well, camera clear like HD..."
-}
-```
-
----
-
-### `POST /recommend`
-
-Returns personalised product recommendations for a user.
-
-**Request:**
-```json
-{
-  "user_id": "user_042",
-  "context": "I need a good pair of wireless earbuds for the gym",
+  "context": "I need wireless earbuds for the gym",
   "n": 5,
   "persona_description": "budget-conscious tech lover",
   "session_history": [],
@@ -231,155 +281,104 @@ Returns personalised product recommendations for a user.
 }
 ```
 
-**Response:**
+---
+
+### `POST /api/simulate-review`
+
+Simulates how a user would rate and review a product.
+
 ```json
 {
-  "recommendations": [
+  "user_id": "user_042",
+  "item": {
+    "name": "Infinix Hot 40 Pro",
+    "category": "Smartphones",
+    "description": "6.78-inch display, 108MP camera"
+  }
+}
+```
+
+---
+
+### MemoryAgent Endpoints
+
+#### `POST /api/memory/ingest`
+
+Persist interaction events and run Qwen consolidation.
+
+```json
+{
+  "user_id": "user_042",
+  "session_id": "sess_abc123",
+  "events": [
     {
-      "item_id": "3f8a21bc",
-      "name": "JBL Tune 230NC TWS",
-      "reason": "Based on your preference for budget-friendly electronics, this offers excellent noise cancellation at a competitive price point."
+      "type": "preference",
+      "content": "User prefers budget earbuds under ₦20,000",
+      "importance": 0.8
+    },
+    {
+      "type": "feedback",
+      "content": "User rated JBL Tune 4.5/5 and purchased it",
+      "importance": 0.9,
+      "metadata": {"item_id": "jbl_tune_230nc"}
+    }
+  ],
+  "run_consolidation": true
+}
+```
+
+Response:
+```json
+{
+  "user_id": "user_042",
+  "memories_before": 12,
+  "memories_after": 14,
+  "pruned": 0,
+  "evicted": 0,
+  "summary_updated": true
+}
+```
+
+#### `POST /api/memory/recall`
+
+Retrieve relevant memories within a token budget.
+
+```json
+{
+  "user_id": "user_042",
+  "query": "wireless earbuds for gym",
+  "max_results": 10,
+  "max_tokens": 600
+}
+```
+
+Response:
+```json
+{
+  "user_id": "user_042",
+  "summary": "Budget-conscious electronics shopper who prefers Infinix and JBL...",
+  "preferences": {"budget": "low", "top_category": "electronics"},
+  "recent_memories": [
+    {
+      "content": "User prefers budget earbuds under ₦20,000",
+      "type": "preference",
+      "score": 0.89
     }
   ]
 }
 ```
 
-**Parameters:**
+#### `GET /api/memory/snapshot/{user_id}`
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `user_id` | `string` | required | Stable user identifier |
-| `context` | `string` | required | Natural language request or query |
-| `n` | `int` | `10` | Number of recommendations (max 10) |
-| `persona_description` | `string` | `""` | Free-text persona for cold-start users |
-| `session_history` | `list[dict]` | `[]` | Prior conversation turns `[{role, content}]` |
-| `domain_filter` | `string` | `null` | Category constraint (e.g. `"electronics"`, `"fashion"`) |
+Lightweight memory status check.
 
----
-
-## Key Design Decisions
-
-### Hybrid Retrieval with RRF
-
-The retrieval stage fuses three signals using Reciprocal Rank Fusion (k=60):
-
-1. **Dense ANN** — Turbovec cosine-similarity search over user history embeddings
-2. **Collaborative Filtering** — Cosine similarity over cross-domain projected user vectors
-3. **Sparse BM25** — Keyword search over the full review corpus
-
-Items appearing in multiple ranked lists receive a compounded RRF boost.
-
-### Embedding-Based Reranking
-
-After retrieval, a two-stage reranker narrows from ~100 candidates to the final top-N:
-
-1. **Blended local scorer** — Combines four signals entirely on-device with no API cost:
-   - Cross-encoder score (`ms-marco-MiniLM-L-6-v2`) — pairwise relevance
-   - Aspect alignment — cosine similarity between candidate embeddings and the user's target aspect query embeddings
-   - Category preference weight — from the user's historical category distribution
-   - Retrieval score — upstream RRF signal
-
-   A persona-conditioned emotional intensity multiplier (derived from rating variance) is applied across the blend. Prunes to top-N deterministically.
-
-2. **LLM reason generation** — Gemini receives only the top-N pre-ranked items (~300 tokens) and writes a short personalised reason per item. It does not re-rank; if it fails, templated reasons are used and the ranking is preserved.
-
-### Task A: LLM Call Reduction
-
-The Task A pipeline runs **one LLM call** per invocation:
-
-- **Style analysis** is computed statistically from review text (avg word length, type-token ratio, rating distribution, recurring bigrams) — no LLM required.
-- **Naija voice injection** is merged into the generation prompt rather than running as a separate rewrite pass, eliminating voice drift and one full round-trip.
-- **Aspect exemplars** are extracted by embedding cosine similarity over the user's own reviews, giving the generation LLM targeted evidence (e.g. what the user wrote about battery life) instead of bare aspect labels.
-
-### Cold-Start Handling
-
-New users with no Turbovec profile are routed through `cold_start_node`, which:
-- Parses the `persona_description` into explicit/implicit signals via the context extraction node
-- Maps the persona to the nearest user cluster centroid using cosine similarity
-- Uses the centroid as a proxy embedding for the retrieval stage
-
-### Caching Strategy
-
-| Layer | Technology | Scope |
-|---|---|---|
-| LLM responses | SQLite (`scratch/cache/llm_cache.db`) | Persistent across restarts |
-| Embeddings | `diskcache` (`scratch/cache/embeddings/`) | Persistent across restarts |
-| BM25 corpus | In-memory, mtime-invalidated | Per process, rebuilt on file change |
-| User profiles | `core.profiles` shared store, mtime-invalidated | Per process |
-| User profile payloads | `lru_cache(maxsize=2048)` on DB read | Per process |
-
----
-
-## Evaluation
-
-Run the full evaluation harness:
-
-```bash
-# Task A only (user modelling)
-PYTHONPATH=. python scripts/evaluate.py --task a --limit 20
-
-# Task B only (recommendations)
-PYTHONPATH=. python scripts/evaluate.py --task b --limit 20
-
-# Both tasks
-PYTHONPATH=. python scripts/evaluate.py --task both
-```
-
-**Metrics and targets:**
-
-| Metric | Target | Task |
-|---|---|---|
-| ROUGE-L | ≥ 0.35 | Task A (review generation) |
-| BERTScore F1 | ≥ 0.82 | Task A (review generation) |
-| RMSE | ≤ 0.80 | Task A (rating prediction) |
-| NDCG@10 | ≥ 0.15 | Task B (recommendation ranking) |
-
-### Ablation Studies
-
-```bash
-PYTHONPATH=. python scripts/run_ablations.py --limit 5
-```
-
-Runs four ablation conditions:
-- **Baseline** — Full pipeline
-- **No Jumia Context** — Task A without Naija style examples
-- **No BM25** — Task B with dense-only retrieval
-- **No Cross-Encoder** — Task B without the local blended scorer
-
----
-
-## Development
-
-All developer workflows are available via `make`:
-
-```bash
-make help          # Show all available targets
-
-make up            # Start all services
-make down          # Stop all services
-make build         # Rebuild the API Docker image
-make fresh         # Tear down → rebuild → bring back up
-
-make logs          # Tail API container logs
-make shell         # Open a bash shell inside the API container
-make restart       # Restart only the API container
-
-make index         # Run the full data pipeline
-make reindex       # Force re-download and re-index
-
-make test          # Run pytest test suite
-make lint          # Lint with ruff
-```
-
-### Running locally (without Docker)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run the API
-uvicorn api.main:app --reload --port 8000
+```json
+{
+  "user_id": "user_042",
+  "memory_count": 14,
+  "preferences": {"budget": "low", "top_category": "electronics"},
+  "summary": "Budget-conscious electronics shopper..."
+}
 ```
 
 ---
@@ -388,30 +387,119 @@ uvicorn api.main:app --reload --port 8000
 
 | Variable | Default | Description |
 |---|---|---|
-| `GOOGLE_API_KEY` | *(required)* | Google AI Studio or Vertex AI key for Gemini |
-| `LLM_MODEL` | `gemini-flash-latest` | Gemini model name |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformer model name |
-| `DATASET_BASE_URL` | *(see `.env.example`)* | Base URL for dataset files (HuggingFace or custom host) |
+| `DASHSCOPE_API_KEY` | *(optional)* | Alibaba Cloud DashScope key for Qwen |
+| `QWEN_MODEL` | `qwen-plus` | Qwen model name |
+| `GOOGLE_API_KEY` | *(optional)* | Google Gemini fallback key |
+| `LLM_MODEL` | `gemini-flash-latest` | Gemini model name (fallback) |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | SentenceTransformer model |
+| `DATASET_BASE_URL` | *(see `.env.example`)* | Dataset download base URL |
 
 ---
 
-## Turbovec Collections
+## Project Structure
 
-| Collection | Content | Indexed by |
+```
+Ego/
+├── agents/
+│   ├── memory_agent.py     # MemoryAgent LangGraph graph (Track 1 core)
+│   ├── rerank_agent.py     # Two-stage reranker
+│   └── retrieval_agent.py  # Hybrid retrieval: Dense + CF + BM25
+│
+├── core/
+│   ├── memory.py           # MemoryStore: SQLite + decay + recall
+│   ├── config.py           # Settings: Qwen + Gemini + storage
+│   ├── llm.py              # Gemini singleton with SQLite cache
+│   ├── embeddings.py       # SentenceTransformer + diskcache
+│   ├── vector_store.py     # Turbovec wrapper
+│   ├── hybrid_search.py    # BM25 + RRF
+│   ├── cross_encoder.py    # Cross-encoder scoring
+│   └── ...
+│
+├── graphs/
+│   ├── task_a.py           # User Modelling LangGraph pipeline
+│   └── task_b.py           # Recommendation LangGraph pipeline
+│
+├── api/
+│   ├── main.py             # FastAPI app + memory endpoints
+│   └── schemas.py          # Pydantic request/response models
+│
+├── docs/
+│   └── architecture.png    # System architecture diagram
+│
+├── alibaba_cloud_proof.py  # Proof of Alibaba Cloud deployment
+├── LICENSE                 # MIT License
+├── Dockerfile              # Multi-stage Docker build
+├── docker-compose.yml      # Services: api, frontend, indexer
+├── requirements.txt        # Python dependencies (incl. openai, dashscope)
+└── Makefile                # Developer workflow shortcuts
+```
+
+---
+
+## Key Design Decisions
+
+### Why Qwen for Memory Consolidation?
+
+Qwen Plus excels at structured JSON extraction and concise summarisation — both critical for producing compact, accurate user preference summaries from noisy interaction logs. Its DashScope endpoint is OpenAI-compatible, making integration seamless via `langchain-openai`.
+
+### Ebbinghaus Forgetting + Access Boosting
+
+Rather than simple TTL expiry, memories decay continuously based on:
+- **Time since last access** — decays half-life every 7 days
+- **Access frequency** — each recall slows future decay via `sqrt(1 + access_count)`
+- **Minimum threshold** — entries below `0.05` effective importance are pruned on next save
+
+This ensures the agent **remembers frequently-relevant preferences** and **forgets one-off interactions** without manual cleanup.
+
+### Context-Window Budget
+
+`recall()` accepts `max_tokens` and greedily selects highest-scoring memories within the character budget (`max_tokens × 4`), guaranteeing the injected memory block never overflows any downstream LLM context window.
+
+### Async Memory Persistence
+
+Memory ingestion after `/recommend` runs as `asyncio.ensure_future()` — the recommendation response returns immediately while the MemoryAgent graph runs in the background. Users never wait for memory writes.
+
+---
+
+## Development
+
+```bash
+make help          # Show all targets
+make up            # Start all services
+make index         # Run data pipeline
+make test          # Run pytest
+make lint          # Ruff linter
+```
+
+### Running locally (without Docker)
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn api.main:app --reload --port 8000
+```
+
+---
+
+## Evaluation
+
+```bash
+# Task A (user modelling)
+PYTHONPATH=. python scripts/evaluate.py --task a --limit 20
+
+# Task B (recommendations)
+PYTHONPATH=. python scripts/evaluate.py --task b --limit 20
+```
+
+| Metric | Target | Task |
 |---|---|---|
-| `user_profiles` | One point per user — their history embedding + profile payload | `scripts/ingest.py` |
-| `naija_style_examples` | Individual Jumia review bodies for RAG | `scripts/seed_naija_examples.py` |
+| ROUGE-L | ≥ 0.35 | Task A (review generation) |
+| BERTScore F1 | ≥ 0.82 | Task A (review generation) |
+| RMSE | ≤ 0.80 | Task A (rating prediction) |
+| NDCG@10 | ≥ 0.15 | Task B (recommendation ranking) |
 
 ---
 
-## Data Pipeline
+## License
 
-```
-scripts/scrape_jumia.py          → data/jumia_reviews.json
-scripts/ingest.py                → data/user_profiles.json
-                                   data/items.json
-scripts/build_index.py           → Turbovec: user_profiles collection
-scripts/seed_naija_examples.py   → Turbovec: naija_style_examples collection
-```
-
-The dataset is also available on Hugging Face at `DreamerX/Ego-Jumia-Review` and is downloaded automatically by `make index`.
+[MIT](LICENSE) — see LICENSE file for details.

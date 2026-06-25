@@ -250,7 +250,7 @@ function UserDashboard({ title, users, loading, selectedUserId, onChange, select
 
   return (
     <section className="mx-auto max-w-[85rem] px-4 pb-20 sm:px-6 lg:px-12 relative z-10">
-      <div className="rounded-[2.5rem] border border-zinc-200/70 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_50px_-36px_rgba(0,0,0,0.7)] backdrop-blur">
+      <div className="rounded-2xl border border-zinc-200/70 bg-white/80 dark:border-zinc-800/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.35)] dark:shadow-[0_24px_50px_-36px_rgba(0,0,0,0.7)] backdrop-blur">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <div className="flex items-center gap-3">
@@ -338,7 +338,7 @@ function UserDashboard({ title, users, loading, selectedUserId, onChange, select
           {stats.map((stat) => (
             <article
               key={stat.label}
-              className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4"
+              className="rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4"
             >
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">{stat.label}</p>
               <p className={`mt-2 text-2xl font-semibold ${themeStyles.statText}`}>
@@ -636,7 +636,7 @@ function HomePage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-28px_rgba(15,23,42,0.25)] dark:shadow-[0_20px_40px_-28px_rgba(0,0,0,0.5)] sm:col-span-2">
+            <article className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-28px_rgba(15,23,42,0.25)] dark:shadow-[0_20px_40px_-28px_rgba(0,0,0,0.5)] sm:col-span-2">
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Model stack</p>
               <h3 className="mt-2 text-xl font-semibold text-zinc-950 dark:text-white">
                 gemini-flash-latest + all-MiniLM-L6-v2
@@ -651,7 +651,7 @@ function HomePage() {
               </div>
             </article>
 
-            <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-5 shadow-[0_16px_36px_-26px_rgba(15,23,42,0.25)] dark:shadow-[0_16px_36px_-26px_rgba(0,0,0,0.4)]">
+            <article className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-5 shadow-[0_16px_36px_-26px_rgba(15,23,42,0.25)] dark:shadow-[0_16px_36px_-26px_rgba(0,0,0,0.4)]">
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Cache path</p>
               <p className="mt-3 text-2xl font-semibold text-zinc-950 dark:text-white">0.9s median</p>
               <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-450">
@@ -659,7 +659,7 @@ function HomePage() {
               </p>
             </article>
 
-            <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-5 shadow-[0_16px_36px_-26px_rgba(15,23,42,0.25)] dark:shadow-[0_16px_36px_-26px_rgba(0,0,0,0.4)]">
+            <article className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-5 shadow-[0_16px_36px_-26px_rgba(15,23,42,0.25)] dark:shadow-[0_16px_36px_-26px_rgba(0,0,0,0.4)]">
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Endpoints</p>
               <p className="mt-3 text-2xl font-semibold text-zinc-950 dark:text-white">5 routes</p>
               <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-450">
@@ -684,7 +684,7 @@ function HomePage() {
               <motion.article
                 key={card.title}
                 id={card.id}
-                className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-7 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)]"
+                className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-7 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)]"
                 variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } }}
                 layout
               >
@@ -717,7 +717,7 @@ function HomePage() {
       </Section>
 
       <Section id="api" className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
-        <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_20px_40px_-30px_rgba(0,0,0,0.5)]">
+        <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-6 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_20px_40px_-30px_rgba(0,0,0,0.5)]">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div className="flex w-full items-start gap-3 md:w-auto md:items-center">
               <div className="shrink-0 rounded-xl border border-emerald-200/70 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 p-2.5 text-emerald-600 dark:text-emerald-400">
@@ -785,11 +785,11 @@ function HomePage() {
       </Section>
 
       <Section id="architecture" className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
-        <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-8 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)]">
+        <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90 p-8 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)]">
           <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Architecture</p>
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {architecture.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-5">
+              <div key={item.label} className="rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-5">
                 <div className="flex items-start gap-3">
                   <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2 text-zinc-700 dark:text-zinc-300">
                     <item.icon size={20} weight="bold" />
@@ -803,7 +803,7 @@ function HomePage() {
               </div>
             ))}
           </div>
-          <div className="mt-8 rounded-2xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4 text-xs text-zinc-650 dark:text-zinc-400">
+          <div className="mt-8 rounded-xl border border-zinc-200/70 dark:border-zinc-800/70 bg-zinc-50/60 dark:bg-zinc-950/60 p-4 text-xs text-zinc-650 dark:text-zinc-400">
             <p>
               Default LLM: <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">gemini-flash-latest</span>
             </p>
@@ -822,7 +822,7 @@ function HomePage() {
           <p className="mb-6 text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
             Key modules
           </p>
-          <div className="divide-y divide-zinc-200/70 dark:divide-zinc-850/70 rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90">
+          <div className="divide-y divide-zinc-200/70 dark:divide-zinc-850/70 rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-900/90">
             {modules.map((module) => (
               <div key={module.name} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -913,7 +913,7 @@ function TaskAPage() {
 
       <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-          <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
+          <article className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Task A endpoint</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
               Run the review simulation
@@ -1003,7 +1003,7 @@ function TaskBPage() {
 
       <Section className="mx-auto max-w-[85rem] px-4 pb-24 sm:px-6 lg:px-12 relative z-10">
         <div className="flex flex-col gap-6">
-          <article className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
+          <article className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-6 shadow-[0_24px_40px_-30px_rgba(15,23,42,0.3)] dark:shadow-[0_24px_40px_-30px_rgba(0,0,0,0.5)] backdrop-blur sm:p-8">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Task B endpoint</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
               Run the recommendation engine

@@ -6,7 +6,7 @@ a user-centric structure for the Ego user modelling agent.
 
 Input:  data/jumia_reviews.json      (product → list of reviews)
 Output: data/user_profiles.json      (user → list of reviews across products)
-        data/items.json              (overwritten in user-profile format for Turbovec)
+        data/user_items.json         (user-profile format for Turbovec)
 
 Each user profile contains:
   - user_id         : stable MD5 hash of the lowercase reviewer name
@@ -40,8 +40,12 @@ import logging
 import math
 import re
 import statistics
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
+
+# Add project root to sys.path so we can import 'core'
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.utils import to_stable_id as user_id
 
@@ -337,7 +341,7 @@ def main() -> None:
     parser.add_argument(
         "--items-out",
         type=Path,
-        default=DATA_DIR / "items.json",
+        default=DATA_DIR / "user_items.json",
         help="Output path for pipeline-ready items (fed into build_index.py).",
     )
     parser.add_argument(
@@ -403,7 +407,7 @@ def main() -> None:
     log.info("Saved %d pipeline items → %s", len(items), args.items_out)
 
     log.info(
-        "\nNext → run:  PYTHONPATH=. python data/build_index.py --collection user_profiles"
+        "\nNext → run:  python scripts/build_index.py --collection user_profiles --input data/user_items.json"
     )
 
 

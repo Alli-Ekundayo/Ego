@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { MagicWand, PaperPlaneTilt, DownloadSimple, ArrowCounterClockwise } from "@phosphor-icons/react";
 import MagneticButton from "./MagneticButton";
 
@@ -34,6 +34,7 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
   const [sessionHistory, setSessionHistory] = useState([]);
   const [draftMessage, setDraftMessage] = useState("");
   const chatEndRef = useRef(null);
+  const formTopRef = useRef(null);
 
   const isReady = !!(selectedUserId || guestUser);
   const hasResults = recommendState?.status === "success" && recommendState?.data?.length > 0;
@@ -41,6 +42,11 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [sessionHistory]);
+
+  // Scroll back to top of section whenever a new request fires
+  const scrollToTop = useCallback(() => {
+    formTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   // When results come back, auto-append an assistant summary turn
   useEffect(() => {
@@ -65,6 +71,7 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
       return;
     }
 
+    scrollToTop();
     setLoadingSubmit(true);
     setRecommendState({ status: "loading", data: null, error: null });
     setFormError("");
@@ -144,9 +151,9 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-5">
+    <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-5" ref={formTopRef}>
       {/* Selected user strip */}
-      <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-950/70 p-4">
+      <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-950/70 p-4">
         <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Selected user</p>
         <p className="mt-2 text-sm font-medium text-zinc-950 dark:text-white">
           {selectedUser ? selectedUser.name : guestUser ? guestUser.name : "Select a user above"}
@@ -163,10 +170,10 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
         )}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.12fr)_minmax(320px,0.88fr)]">
 
         {/* ── Left: Conversation panel ── */}
-        <article className="flex flex-col rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 backdrop-blur overflow-hidden">
+        <article className="flex flex-col rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 backdrop-blur overflow-hidden">
           <div className="flex items-start justify-between gap-4 p-5 pb-0 sm:p-6 sm:pb-0">
             <div>
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Multiturn chat</p>
@@ -268,7 +275,7 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
 
         {/* ── Right: Controls ── */}
         <article className="space-y-5">
-          <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-5 backdrop-blur sm:p-6">
+          <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-5 backdrop-blur sm:p-6">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Current request</p>
             <h3 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
               Run the recommendation endpoint
@@ -291,7 +298,7 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
             </label>
           </div>
 
-          <div className="rounded-[2rem] border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-5 backdrop-blur sm:p-6">
+          <div className="rounded-2xl border border-zinc-200/70 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-900/80 p-5 backdrop-blur sm:p-6">
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Context controls</p>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -339,13 +346,13 @@ export default function RecommendForm({ setRecommendState, selectedUserId, selec
               </span>
             </label>
 
-            <div className="mt-5 rounded-2xl border border-zinc-200/70 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
+            <div className="mt-5 rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
               <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">Session summary</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-450">
+                <div className="rounded-lg border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-450">
                   {selectedUser ? `${formatCategory(selectedUser.top_category)} audience` : guestUser ? "New user (cold-start)" : "No user selected"}
                 </div>
-                <div className="rounded-xl border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-450">
+                <div className="rounded-lg border border-zinc-200/70 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-3 text-xs text-zinc-600 dark:text-zinc-450">
                   {sessionHistory.filter(h => h.role === "user").length} user turn{sessionHistory.filter(h => h.role === "user").length !== 1 ? "s" : ""}
                 </div>
               </div>
