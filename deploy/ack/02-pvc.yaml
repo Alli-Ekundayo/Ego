@@ -1,0 +1,15 @@
+# ── PersistentVolumeClaim: LLM / embedding cache ──────────────────────────────
+# Uses Alibaba Cloud NAS (ReadWriteMany) if the NAS StorageClass is available,
+# otherwise falls back to cloud-efficiency (block storage, ReadWriteOnce).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ego-cache-pvc
+  namespace: ego
+spec:
+  accessModes:
+    - ReadWriteOnce           # change to ReadWriteMany when using NAS
+  storageClassName: alicloud-disk-efficiency
+  resources:
+    requests:
+      storage: 20Gi

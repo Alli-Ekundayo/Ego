@@ -92,7 +92,7 @@ class RerankAgent:
       2. LLM reason generation for top-N items only (not re-ranking).
 
     The LLM is initialised lazily on first use so that a missing or invalid
-    GOOGLE_API_KEY does not crash FastAPI at startup.
+    DASHSCOPE_API_KEY does not crash FastAPI at startup.
     """
 
     @cached_property

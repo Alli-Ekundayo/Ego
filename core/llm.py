@@ -1,6 +1,8 @@
 """core/llm.py
 -------------
 Singleton LLM accessor with persistent disk-based caching for responses.
+
+Uses Qwen (DashScope) via the OpenAI-compatible endpoint.
 """
 
 from functools import lru_cache
@@ -11,7 +13,7 @@ from langchain_core.globals import set_llm_cache
 from langchain_core.load import dumps, loads
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, Generation
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -77,19 +79,20 @@ set_llm_cache(SafeSQLiteCache(database_path=str(cache_path)))
 
 @lru_cache(maxsize=4)
 def get_llm(
-    model: str = settings.LLM_MODEL, temperature: float = 0.7
-) -> ChatGoogleGenerativeAI:
+    model: str = settings.QWEN_MODEL, temperature: float = 0.7
+) -> ChatOpenAI:
     """
-    Return a cached ChatGoogleGenerativeAI instance.
+    Return a cached Qwen (DashScope) ChatOpenAI instance.
     lru_cache ensures object reuse, while SQLiteCache ensures response persistence.
     """
-    raw_key = settings.GOOGLE_API_KEY.get_secret_value()
+    raw_key = settings.DASHSCOPE_API_KEY.get_secret_value() if settings.DASHSCOPE_API_KEY else ""
     api_key = raw_key if raw_key else "dummy-key-for-testing"
 
-    return ChatGoogleGenerativeAI(
+    return ChatOpenAI(
         model=model,
         temperature=temperature,
-        google_api_key=api_key,
-        timeout=15,
-        max_retries=1,
+        api_key=api_key,  # type: ignore[arg-type]
+        base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        timeout=30,
+        max_retries=2,
     )

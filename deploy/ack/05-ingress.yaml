@@ -1,0 +1,29 @@
+# ── Ingress: ego (optional — requires an Ingress controller on ACK) ───────────
+# Skip this if you are using the LoadBalancer Service directly.
+# Apply with: kubectl apply -f 05-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ego-ingress
+  namespace: ego
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ego-api
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ego-frontend
+                port:
+                  number: 80

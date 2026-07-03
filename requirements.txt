@@ -4,7 +4,6 @@ pydantic
 pydantic-settings
 langgraph
 langchain
-langchain-google-genai
 langchain-community
 langchain-openai
 sqlalchemy
@@ -23,3 +22,4 @@ requests
 beautifulsoup4
 diskcache
 dashscope
+

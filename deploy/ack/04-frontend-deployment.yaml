@@ -1,0 +1,59 @@
+# ── Deployment: ego-frontend ──────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ego-frontend
+  namespace: ego
+  labels:
+    app: ego-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ego-frontend
+  template:
+    metadata:
+      labels:
+        app: ego-frontend
+    spec:
+      imagePullSecrets:
+        - name: acr-secret
+      containers:
+        - name: ego-frontend
+          image: dreamer-registry.ap-southeast-1.cr.aliyuncs.com/ego/ego-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /index.html
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+
+---
+# ── Service: ego-frontend (LoadBalancer via Alibaba Cloud SLB) ───────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ego-frontend
+  namespace: ego
+  annotations:
+    # Request an Alibaba Cloud Server Load Balancer (public IP)
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-spec: "slb.s1.small"
+spec:
+  type: LoadBalancer
+  selector:
+    app: ego-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

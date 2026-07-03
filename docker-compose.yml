@@ -35,8 +35,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gemini-flash-latest}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
+      - LLM_MODEL=${QWEN_MODEL:-qwen-plus}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - HF_HOME=/app/scratch/cache/huggingface
       # ── Alibaba Cloud / Qwen (DashScope) ──────────────────────────────────
@@ -64,8 +65,8 @@ services:
     image: ego-api:latest
     container_name: ego-indexer
     environment:
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - LLM_MODEL=${LLM_MODEL:-gemini-flash-latest}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - DATASET_BASE_URL=${DATASET_BASE_URL}
       - HF_HOME=/app/scratch/cache/huggingface

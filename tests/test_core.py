@@ -144,9 +144,9 @@ class TestSafeDeserialization:
         payload = """{
           "lc": 1,
           "type": "constructor",
-          "id": ["langchain_google_genai", "ChatGoogleGenerativeAI"],
+          "id": ["langchain_openai", "ChatOpenAI"],
           "kwargs": {
-            "model": "gemini-flash-latest"
+            "model": "qwen-plus"
           }
         }"""
 

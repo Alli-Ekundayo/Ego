@@ -1,0 +1,94 @@
+# ── Deployment: ego-api ───────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ego-api
+  namespace: ego
+  labels:
+    app: ego-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ego-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ego-api
+    spec:
+      # Pull image from Alibaba Cloud Container Registry
+      imagePullSecrets:
+        - name: acr-secret     # created by: kubectl create secret docker-registry acr-secret ...
+      containers:
+        - name: ego-api
+          # Replace <REGION> and <NAMESPACE> with your values, or let deploy_acs.sh patch this
+          image: dreamer-registry.ap-southeast-1.cr.aliyuncs.com/ego/ego-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: DASHSCOPE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ego-secrets
+                  key: DASHSCOPE_API_KEY
+            - name: QWEN_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: ego-secrets
+                  key: QWEN_MODEL
+            - name: LLM_MODEL
+              value: qwen-plus
+            - name: EMBEDDING_MODEL
+              value: all-MiniLM-L6-v2
+            - name: HF_HOME
+              value: /app/scratch/cache/huggingface
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          volumeMounts:
+            - name: cache
+              mountPath: /app/scratch/cache
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 30
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: ego-cache-pvc
+
+---
+# ── Service: ego-api (ClusterIP) ─────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: ego-api
+  namespace: ego
+spec:
+  selector:
+    app: ego-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http

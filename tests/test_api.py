@@ -3,7 +3,7 @@
 Unit and integration tests for the Ego pipeline.
 
 LLM and Turbovec calls are mocked so the suite runs fast without
-a live Gemini key or Turbovec instance.
+a live Qwen key or Turbovec instance.
 """
 
 from unittest.mock import patch

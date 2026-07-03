@@ -142,7 +142,7 @@ class RetrievalAgent:
         target_vectors = embedding_model.embed_batch(target_texts_batch)
         x = np.array(source_vectors, dtype=np.float32)
         y = np.array(target_vectors, dtype=np.float32)
-        reg = 0.05
+        reg = _CROSS_DOMAIN_REG
         xtx = x.T @ x
         eye = np.eye(xtx.shape[0], dtype=np.float32)
         w = np.linalg.solve(xtx + reg * eye, x.T @ y)

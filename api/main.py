@@ -66,6 +66,11 @@ async def _lifespan(app: FastAPI):
         from core.products import load_products_by_id
         load_products_by_id()
 
+        # Check API key configuration
+        from core.config import settings
+        if not settings.DASHSCOPE_API_KEY or not settings.DASHSCOPE_API_KEY.get_secret_value():
+            log.warning("DASHSCOPE_API_KEY is not set — LLM calls (consolidate, rerank) will fail at runtime.")
+
         log.info("Startup: all singletons pre-loaded.")
 
     await asyncio.to_thread(_load)
@@ -98,6 +103,9 @@ def _normalise_recommendations(result: dict[str, Any]) -> list[dict]:
     recommendations = (
         result.get("ranked_recommendations") or result.get("recommendations") or []
     )
+
+    if not result.get("ranked_recommendations") and not result.get("recommendations"):
+        log.warning("Task B graph returned empty or invalid recommendations key in result state: %s", result)
 
     if recommendations and isinstance(recommendations[0], list):
         recommendations = [item for sublist in recommendations for item in sublist]
@@ -221,7 +229,7 @@ async def recommend(request: RecommendRequest) -> RecommendResponse:
         except Exception as exc:
             log.warning("Background memory ingestion failed: %s", exc)
 
-    asyncio.ensure_future(_persist_memory())
+    asyncio.create_task(_persist_memory())
     return response
 
 

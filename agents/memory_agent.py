@@ -14,9 +14,8 @@ This agent is called:
   - After every /simulate-review response (post-hook, async)
   - Directly via POST /memory/consolidate
 
-Qwen Cloud (DashScope) is used for the consolidation LLM pass because its
-context window and instruction-following are well-suited to structured
-memory management tasks.
+Qwen Cloud (DashScope) is the sole LLM for consolidation because its context
+window and instruction-following are well-suited to structured memory management.
 """
 
 from __future__ import annotations
@@ -151,8 +150,12 @@ def consolidate_node(state: MemoryAgentState) -> dict:
 
     except Exception as exc:
         log.warning("MemoryAgent.consolidate: Qwen consolidation failed: %s", exc)
-        # Fallback: use existing summary unchanged
-        return {"summary": store.get_summary(), "preferences": store.get_preferences()}
+        # Fallback: use existing summary/preferences unchanged if possible, otherwise empty defaults
+        try:
+            return {"summary": store.get_summary(), "preferences": store.get_preferences()}
+        except Exception as fallback_exc:
+            log.warning("MemoryAgent.consolidate: Fallback retrieval failed: %s", fallback_exc)
+            return {"summary": "", "preferences": {}}
 
 
 def prune_node(state: MemoryAgentState) -> dict:
@@ -186,27 +189,23 @@ def _get_qwen_llm():
 
     DashScope exposes an OpenAI-compatible endpoint, so we use
     langchain_openai.ChatOpenAI pointed at the DashScope base URL.
-
-    Falls back to the configured Gemini LLM if DASHSCOPE_API_KEY is absent.
+    Raises RuntimeError if DASHSCOPE_API_KEY is not configured.
     """
     dashscope_key = settings.DASHSCOPE_API_KEY.get_secret_value() if settings.DASHSCOPE_API_KEY else ""
-    if dashscope_key:
-        try:
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=settings.QWEN_MODEL,
-                api_key=dashscope_key,  # type: ignore[arg-type]
-                base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
-                temperature=0.3,
-                timeout=60,
-                max_retries=3,
-            )
-        except Exception as exc:
-            log.warning("Qwen LLM init failed, falling back to Gemini: %s", exc)
-
-    # Gemini fallback
-    from core.llm import get_llm
-    return get_llm(settings.LLM_MODEL, temperature=0.3)
+    if not dashscope_key:
+        raise RuntimeError(
+            "DASHSCOPE_API_KEY is required for Qwen LLM consolidation. "
+            "Set it in your .env or environment."
+        )
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
+        model=settings.QWEN_MODEL,
+        api_key=dashscope_key,  # type: ignore[arg-type]
+        base_url="https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+        temperature=0.3,
+        timeout=60,
+        max_retries=3,
+    )
 
 
 # ---------------------------------------------------------------------------
